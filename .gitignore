@@ -1,0 +1,30 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local builds and cache
+dist/
+build/
+coverage/
+.temp/
+.tmp/
+.cache/
+
+# Office Add-in local certs
+.office-addin-dev-certs/
+
+# Netlify local state (never commit)
+.netlify/
+
+# Mac / Windows system files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+logs/
