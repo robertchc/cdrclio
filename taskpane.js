@@ -9,6 +9,9 @@ const DIALOG_START_URL = `${BASE_URL}/auth-start.html`;
 
 let cachedAccessToken = null;
 
+// Holds the currently-loaded matter's fields, keyed by the data-field values in your HTML
+let currentMatter = null;
+
 Office.onReady((info) => {
   if (info.host !== Office.HostType.Word) return;
 
@@ -24,6 +27,22 @@ Office.onReady((info) => {
       toggle.classList.toggle("expanded");
       const content = toggle.nextElementSibling;
       if (content) content.classList.toggle("expanded");
+    });
+  });
+
+  // Field buttons: click to insert loaded matter data
+  document.querySelectorAll(".cdr-field").forEach((el) => {
+    el.addEventListener("click", () => {
+      const key = el.getAttribute("data-field");
+      if (!key) return;
+
+      const value = currentMatter?.[key];
+      if (value == null || String(value).trim() === "") {
+        showMessage("That field isn’t available for this matter yet. Search a matter first.");
+        return;
+      }
+
+      insertTextAtCursor(String(value));
     });
   });
 });
@@ -47,16 +66,22 @@ async function searchMatter() {
 
     showMessage("Searching Clio...");
 
-    const clientName = await fetchClientNameByMatterNumber(cachedAccessToken, matterNumber);
+    const fieldBag = await fetchMatterFieldBagByMatterNumber(cachedAccessToken, matterNumber);
 
-    if (!clientName) {
+    if (!fieldBag) {
+      currentMatter = null;
       clearDetails();
       showMessage(`No exact match found for matter # ${matterNumber}.`);
+      renderFields(); // clears visible values
       return;
     }
 
+    currentMatter = fieldBag;
+
+    // Populate values under each label
+    renderFields();
+
     clearMessage();
-    displayClientName(clientName);
   } catch (error) {
     console.error("Search failed:", error);
 
@@ -66,24 +91,52 @@ async function searchMatter() {
       cachedAccessToken = null;
     }
 
+    currentMatter = null;
     clearDetails();
+    renderFields(); // clears visible values
     showMessage("Search failed (see console for details).");
   }
 }
 
-function displayClientName(fullName) {
-  const detailsSection = document.getElementById("details-section");
-  if (!detailsSection) return;
+/**
+ * Updates the UI so each .cdr-field shows its value under the label:
+ * Label
+ *   value (or em-dash if missing)
+ */
+function renderFields() {
+  document.querySelectorAll(".cdr-field").forEach((el) => {
+    const key = el.getAttribute("data-field");
+    if (!key) return;
 
-  detailsSection.innerHTML = "";
+    // Preserve the original label text (first time only)
+    if (!el.dataset.label) {
+      el.dataset.label = el.textContent.trim();
+    }
 
-  const row = document.createElement("div");
-  row.className = "detail-item";
-  row.textContent = `Client Name: ${fullName}`;
+    const label = el.dataset.label;
+    const value = currentMatter?.[key];
 
-  row.onclick = () => insertTextAtCursor(fullName);
+    // Build a clean two-line layout
+    el.innerHTML = "";
 
-  detailsSection.appendChild(row);
+    const labelDiv = document.createElement("div");
+    labelDiv.className = "cdr-field-label";
+    labelDiv.textContent = label;
+
+    const valueDiv = document.createElement("div");
+    valueDiv.className = "cdr-field-value";
+    valueDiv.textContent = value == null || String(value).trim() === "" ? "—" : String(value);
+
+    el.appendChild(labelDiv);
+    el.appendChild(valueDiv);
+
+    // Add a subtle state cue
+    if (valueDiv.textContent === "—") {
+      el.classList.add("cdr-field-empty");
+    } else {
+      el.classList.remove("cdr-field-empty");
+    }
+  });
 }
 
 function insertTextAtCursor(text) {
@@ -159,8 +212,19 @@ async function exchangeCodeForToken(code) {
   return resp.json();
 }
 
-async function fetchClientNameByMatterNumber(accessToken, matterNumber) {
-  const fields = "id,display_number,client";
+/**
+ * Loads the matter record (core + custom fields) and returns a "field bag"
+ * keyed by your taskpane data-field values.
+ */
+async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
+  // Core + custom fields (custom_field_values are where your export-style columns live)
+  const fields =
+    "id,display_number,number,custom_number,description,status," +
+    "client{name,first_name,last_name}," +
+    "practice_area{name}," +
+    "originating_attorney{name,first_name,last_name}," +
+    "responsible_attorney{name,first_name,last_name}," +
+    "custom_field_values{value,custom_field{name},picklist_option{name}}";
 
   const url = `${BASE_URL}/.netlify/functions/clioMatters?query=${encodeURIComponent(
     matterNumber
@@ -182,20 +246,85 @@ async function fetchClientNameByMatterNumber(accessToken, matterNumber) {
   const json = await resp.json();
   const records = Array.isArray(json?.data) ? json.data : [];
 
-  const match = records.find(
-    (m) => String(m?.display_number || "").trim() === matterNumber
-  );
-
+  // Exact match on display_number (matches your current workflow)
+  const match = records.find((m) => String(m?.display_number || "").trim() === matterNumber);
   if (!match) return null;
 
-  const client = match.client || {};
-  if (client.name) return String(client.name).trim();
+  return buildFieldBag(match);
+}
 
-  const first = String(client.first_name || "").trim();
-  const last = String(client.last_name || "").trim();
-  const combined = `${first} ${last}`.trim();
+function buildFieldBag(matter) {
+  // Build a label -> value dictionary from Clio custom fields
+  const custom = Object.create(null);
+  const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
-  return combined || null;
+  for (const cfv of cfvs) {
+    const label = cfv?.custom_field?.name ? String(cfv.custom_field.name).trim() : "";
+    if (!label) continue;
+
+    const pick = cfv?.picklist_option?.name ? String(cfv.picklist_option.name).trim() : "";
+    const val = cfv?.value != null ? String(cfv.value).trim() : "";
+    custom[label] = pick || val || null;
+  }
+
+  const client =
+    (matter?.client?.name && String(matter.client.name).trim()) ||
+    `${String(matter?.client?.first_name || "").trim()} ${String(matter?.client?.last_name || "").trim()}`.trim() ||
+    null;
+
+  const practiceArea = matter?.practice_area?.name ? String(matter.practice_area.name).trim() : null;
+
+  const responsible =
+    (matter?.responsible_attorney?.name && String(matter.responsible_attorney.name).trim()) ||
+    `${String(matter?.responsible_attorney?.first_name || "").trim()} ${String(
+      matter?.responsible_attorney?.last_name || ""
+    ).trim()}`.trim() ||
+    null;
+
+  const originating =
+    (matter?.originating_attorney?.name && String(matter.originating_attorney.name).trim()) ||
+    `${String(matter?.originating_attorney?.first_name || "").trim()} ${String(
+      matter?.originating_attorney?.last_name || ""
+    ).trim()}`.trim() ||
+    null;
+
+  // Map to your taskpane's data-field keys
+  return {
+    // Tier 1
+    client_name: client,
+    adverse_party_name: custom["Adverse Party Name"] || null,
+    case_name: custom["Case Name (a v. b)"] || null,
+    court_file_no: custom["Court File No. (Pleadings)"] || null,
+    court_name: custom["Court (pleadings)"] || null,
+
+    // Tier 2
+    date_of_separation: custom["Date of Separation"] || null,
+    date_of_marriage: custom["Date of Marriage"] || null,
+    date_of_divorce: custom["Date of Divorce"] || null,
+    date_of_most_recent_order: custom["Date of Most Recent Order"] || null,
+    type_of_most_recent_order: custom["Type of Most Recent Order"] || null,
+    judge_name: custom["Judge Name ie. Justice Jim Doe"] || null,
+    your_honour: custom["My Lord/Lady/Your Honour"] || null,
+
+    // Tier 3
+    matter_number: matter?.display_number ? String(matter.display_number).trim() : null,
+    practice_area: practiceArea,
+    matter_status: matter?.status ? String(matter.status).trim() : null,
+    matter_stage: custom["Matter stage"] || null,
+    responsible_attorney: responsible,
+    originating_attorney: originating,
+    opposing_counsel: custom["Opposing Counsel"] || null,
+
+    // Tier 4
+    matrimonial_status: custom["Matrimonial Status"] || null,
+    cohabitation_begin_date: custom["Co-Habitation Begin Date"] || null,
+    common_law_begin_date: custom["Spousal Common-Law Begin Date"] || null,
+    place_of_marriage: custom["Place of Marriage"] || null,
+    adverse_dob: custom["Adverse DOB"] || null,
+
+    // keep full custom map for easy expansion/debug
+    __custom: custom,
+  };
 }
 
 /* ---------- UI helpers (no alerts; Word may block alert()) ---------- */
