@@ -1,19 +1,73 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>Clio Matter Details</title>
-    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link rel="stylesheet" href="https://res-1.cdn.office.net/files/fabric-cdn-prod_20230815.002/office-ui-fabric-core/11.1.0/css/fabric.min.css"/>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>CDR Clio</title>
+
+  <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+  <link rel="stylesheet" href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/11.0.0/css/fabric.min.css" />
+
+  <link rel="stylesheet" href="taskpane.css" type="text/css" />
 </head>
-<body class="ms-font-m ms-welcome ms-Fabric">
-    <main id="app-body" style="padding: 20px; display: none;">
-        <div id="search-area">
-            <input type="text" id="matterNumber" placeholder="Matter #" style="width: 60%; padding: 8px;">
-            <button id="searchButton" class="ms-Button ms-Button--primary">Search</button>
-        </div>
-        <div id="details-section" style="margin-top: 20px;"></div>
-    </main>
-    <script src="taskpane.js"></script>
+
+<body class="ms-font-m ms-Fabric">
+  <!-- Header (borrowed vibe from Clause Picker) -->
+  <header class="cdr-header ms-bgColor-neutralLighter">
+    <img
+      class="cdr-logo"
+      width="44"
+      height="44"
+      src="https://cdrapps.blob.core.windows.net/clausepicker/assets/logo-filled.png"
+      alt="CDR Law"
+      title="CDR Law"
+    />
+    <div class="cdr-header-text">
+      <div class="cdr-title">CDR Clio</div>
+      <div class="cdr-subtitle ms-font-s ms-fontColor-neutralSecondary">
+        Matter lookup and insertion
+      </div>
+    </div>
+  </header>
+
+  <main id="app-body" class="cdr-main" style="display:none;">
+    <!-- Search card -->
+    <section class="cdr-card">
+      <div class="cdr-card-title">Find a matter</div>
+      <div class="cdr-card-subtitle ms-font-s ms-fontColor-neutralSecondary">
+        Enter the matter number exactly.
+      </div>
+
+      <div class="cdr-row">
+        <input
+          type="text"
+          id="matterNumber"
+          class="cdr-input"
+          placeholder="Matter # (e.g., 04920)"
+          autocomplete="off"
+        />
+        <button id="searchButton" class="cdr-btn cdr-btn-primary" type="button">
+          <span class="cdr-btn-text">Search</span>
+          <span class="cdr-spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div id="status" class="cdr-status" role="status" aria-live="polite" style="display:none;"></div>
+    </section>
+
+    <!-- Results card -->
+    <section class="cdr-card">
+      <div class="cdr-card-title">Result</div>
+      <div class="cdr-card-subtitle ms-font-s ms-fontColor-neutralSecondary">
+        Click to insert into your document.
+      </div>
+
+      <div id="details-section" class="cdr-results"></div>
+    </section>
+  </main>
+
+  <script src="taskpane.js"></script>
 </body>
 </html>
