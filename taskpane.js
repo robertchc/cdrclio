@@ -155,9 +155,9 @@ async function exchangeCodeForToken(code) {
 }
 
 async function fetchClientNameByMatterNumber(accessToken, matterNumber) {
-  // Keep payload small: only fetch what we need.
   const fields = "id,display_number,client";
-  const url = `https://app.clio.com/api/v4/matters?query=${encodeURIComponent(
+
+  const url = `${BASE_URL}/.netlify/functions/clioMatters?query=${encodeURIComponent(
     matterNumber
   )}&fields=${encodeURIComponent(fields)}`;
 
@@ -171,13 +171,12 @@ async function fetchClientNameByMatterNumber(accessToken, matterNumber) {
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
-    throw new Error(`Clio matters search failed (${resp.status}). ${text}`);
+    throw new Error(`Matters lookup failed (${resp.status}). ${text}`);
   }
 
   const json = await resp.json();
   const records = Array.isArray(json?.data) ? json.data : [];
 
-  // The query search can return near-matches; prefer exact display_number match.
   const match = records.find(
     (m) => String(m?.display_number || "").trim() === matterNumber
   );
@@ -185,17 +184,15 @@ async function fetchClientNameByMatterNumber(accessToken, matterNumber) {
   if (!match) return null;
 
   const client = match.client || {};
-
-  // Prefer a ready-to-use "name" if present
   if (client.name) return String(client.name).trim();
 
-  // Fallback if only first/last exist
   const first = String(client.first_name || "").trim();
   const last = String(client.last_name || "").trim();
   const combined = `${first} ${last}`.trim();
 
   return combined || null;
 }
+
 
 /* ---------- UI helpers (no alerts; Word may block alert()) ---------- */
 
