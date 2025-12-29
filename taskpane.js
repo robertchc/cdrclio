@@ -245,10 +245,10 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
   if (!matterId) return null;
 
   // 2) DETAIL FETCH (custom_field_values is valid here)
-  const detailFields =
-    "id,display_number,number,status," +
-    "client{name,first_name,last_name}," +
-    "custom_field_values{id,value,custom_field}";
+const detailFields =
+  "id,display_number,number,status," +
+  "client{name,first_name,last_name}," +
+  "custom_field_values{id,value,custom_field{id,name}}";
 
   const detailUrl =
     `${DETAIL_FN}?id=${encodeURIComponent(matterId)}` +
@@ -275,18 +275,15 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
 }
 
 function buildFieldBag(matter) {
-  // custom_field_values come back with custom_field{id} and value.
-  // We cannot reliably map “Court File No. (Pleadings)” etc without
-  // knowing your custom field IDs, so we store by ID for now.
-  const customById = Object.create(null);
+  const custom = Object.create(null);
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
   for (const cfv of cfvs) {
-    const id = cfv?.custom_field?.id;
-    if (!id) continue;
+    const name = cfv?.custom_field?.name ? String(cfv.custom_field.name).trim() : "";
+    if (!name) continue;
 
     const val = cfv?.value != null ? String(cfv.value).trim() : "";
-    customById[String(id)] = val || null;
+    custom[name] = val || null;
   }
 
   const client =
@@ -295,43 +292,41 @@ function buildFieldBag(matter) {
     null;
 
   return {
-    // What we can fill confidently right now
+    // Tier 1
     client_name: client,
-    matter_number: matter?.display_number ? String(matter.display_number).trim() : null,
-    matter_status: matter?.status ? String(matter.status).trim() : null,
-
-    // Tier 1 (placeholders until we map custom field IDs)
-    adverse_party_name: null,
-    case_name: null,
-    court_file_no: null,
-    court_name: null,
+    adverse_party_name: custom["Adverse Party Name"] || null,
+    case_name: custom["Case Name (a v. b)"] || null,
+    court_file_no: custom["Court File No. (Pleadings)"] || null,
+    court_name: custom["Court (pleadings)"] || null,
 
     // Tier 2
-    date_of_separation: null,
-    date_of_marriage: null,
-    date_of_divorce: null,
-    date_of_most_recent_order: null,
-    type_of_most_recent_order: null,
-    judge_name: null,
-    your_honour: null,
+    date_of_separation: custom["Date of Separation"] || null,
+    date_of_marriage: custom["Date of Marriage"] || null,
+    date_of_divorce: custom["Date of Divorce"] || null,
+    date_of_most_recent_order: custom["Date of Most Recent Order"] || null,
+    type_of_most_recent_order: custom["Type of Most Recent Order"] || null,
+    judge_name: custom["Judge Name ie. Justice Jim Doe"] || null,
+    your_honour: custom["My Lord/Lady/Your Honour"] || null,
 
     // Tier 3
-    practice_area: null,
-    matter_stage: null,
-    responsible_attorney: null,
-    originating_attorney: null,
-    opposing_counsel: null,
+    matter_number: matter?.display_number ? String(matter.display_number).trim() : null,
+    matter_status: matter?.status ? String(matter.status).trim() : null,
+    matter_stage: custom["Matter stage"] || null,
+    responsible_attorney: custom["Responsible Attorney"] || null,
+    originating_attorney: custom["Originating Attorney"] || null,
+    opposing_counsel: custom["Opposing Counsel"] || null,
 
     // Tier 4
-    matrimonial_status: null,
-    cohabitation_begin_date: null,
-    common_law_begin_date: null,
-    place_of_marriage: null,
-    adverse_dob: null,
+    matrimonial_status: custom["Matrimonial Status"] || null,
+    cohabitation_begin_date: custom["Co-Habitation Begin Date"] || null,
+    common_law_begin_date: custom["Spousal Common-Law Begin Date"] || null,
+    place_of_marriage: custom["Place of Marriage"] || null,
+    adverse_dob: custom["Adverse DOB"] || null,
 
-    __custom_by_id: customById,
+    __custom: custom,
   };
 }
+
 
 /* ---------- UI helpers ---------- */
 
