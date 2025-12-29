@@ -57,15 +57,73 @@
       <div id="status" class="cdr-status" role="status" aria-live="polite" style="display:none;"></div>
     </section>
 
-    <!-- Results card -->
-    <section class="cdr-card">
-      <div class="cdr-card-title">Result</div>
-      <div class="cdr-card-subtitle ms-font-s ms-fontColor-neutralSecondary">
-        Click to insert into your document.
-      </div>
+<!-- Fields card -->
+<section class="cdr-card">
+  <div class="cdr-card-title">Insert fields</div>
+  <div class="cdr-card-subtitle ms-font-s ms-fontColor-neutralSecondary">
+    Expand a tier, then click a field to insert it.
+  </div>
 
-      <div id="details-section" class="cdr-results"></div>
-    </section>
+  <div class="cdr-field-groups">
+
+    <!-- TIER 1 -->
+    <div class="cdr-group">
+      <div class="cdr-group-toggle">Tier 1 — Court & Parties</div>
+      <div class="cdr-group-content">
+        <div class="cdr-field" data-field="client_name">Client Name</div>
+        <div class="cdr-field" data-field="adverse_party_name">Adverse Party Name</div>
+        <div class="cdr-field" data-field="case_name">Case Name (a v. b)</div>
+        <div class="cdr-field" data-field="court_file_no">Court File No. (Pleadings)</div>
+        <div class="cdr-field" data-field="court_name">Court (pleadings)</div>
+      </div>
+    </div>
+
+    <!-- TIER 2 -->
+    <div class="cdr-group">
+      <div class="cdr-group-toggle">Tier 2 — Key Dates & Orders</div>
+      <div class="cdr-group-content">
+        <div class="cdr-field" data-field="date_of_separation">Date of Separation</div>
+        <div class="cdr-field" data-field="date_of_marriage">Date of Marriage</div>
+        <div class="cdr-field" data-field="date_of_divorce">Date of Divorce</div>
+        <div class="cdr-field" data-field="date_of_most_recent_order">Date of Most Recent Order</div>
+        <div class="cdr-field" data-field="type_of_most_recent_order">Type of Most Recent Order</div>
+        <div class="cdr-field" data-field="judge_name">Judge Name</div>
+        <div class="cdr-field" data-field="your_honour">My Lord/Lady/Your Honour</div>
+      </div>
+    </div>
+
+    <!-- TIER 3 -->
+    <div class="cdr-group">
+      <div class="cdr-group-toggle">Tier 3 — Matter & Lawyer Info</div>
+      <div class="cdr-group-content">
+        <div class="cdr-field" data-field="matter_number">Display Number</div>
+        <div class="cdr-field" data-field="practice_area">Practice Area</div>
+        <div class="cdr-field" data-field="matter_status">Status</div>
+        <div class="cdr-field" data-field="matter_stage">Matter stage</div>
+        <div class="cdr-field" data-field="responsible_attorney">Responsible Attorney</div>
+        <div class="cdr-field" data-field="originating_attorney">Originating Attorney</div>
+        <div class="cdr-field" data-field="opposing_counsel">Opposing Counsel</div>
+      </div>
+    </div>
+
+    <!-- TIER 4 -->
+    <div class="cdr-group">
+      <div class="cdr-group-toggle">Tier 4 — Family Law Details</div>
+      <div class="cdr-group-content">
+        <div class="cdr-field" data-field="matrimonial_status">Matrimonial Status</div>
+        <div class="cdr-field" data-field="cohabitation_begin_date">Co-Habitation Begin Date</div>
+        <div class="cdr-field" data-field="common_law_begin_date">Spousal Common-Law Begin Date</div>
+        <div class="cdr-field" data-field="place_of_marriage">Place of Marriage</div>
+        <div class="cdr-field" data-field="adverse_dob">Adverse DOB</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Optional: keep this as a simple place for status messages/results if your JS uses it -->
+  <div id="details-section" class="cdr-results" style="margin-top:12px;"></div>
+</section>
+
   </main>
 
   <script src="taskpane.js"></script>

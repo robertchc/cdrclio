@@ -22,6 +22,16 @@ Office.onReady((info) => {
   }
 });
 
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".cdr-group-toggle").forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      toggle.classList.toggle("expanded");
+      const content = toggle.nextElementSibling;
+      if (content) content.classList.toggle("expanded");
+    });
+  });
+});
+
 async function searchMatter() {
   const input = document.getElementById("matterNumber");
   const matterNumber = (input?.value || "").trim();
@@ -51,15 +61,17 @@ async function searchMatter() {
 
     clearMessage();
     displayClientName(clientName);
-  } catch (error) {
-    console.error("Search failed:", error);
+} catch (error) {
+  console.error("Search failed:", error);
 
-    // If token expired/invalid, force re-auth on next attempt
+  // Only force re-auth if the token was rejected (typically 401).
+  const msg = String(error || "");
+  if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
     cachedAccessToken = null;
-
-    clearDetails();
-    showMessage("Search failed (see console for details).");
   }
+
+  clearDetails();
+  showMessage("Search failed (see console for details).");
 }
 
 function displayClientName(fullName) {

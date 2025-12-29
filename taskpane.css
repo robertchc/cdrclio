@@ -99,3 +99,61 @@ main, #app-body {
 .detail-item strong {
   color: #323130;
 }
+/* ---------- Collapsible tier groups (Clause Picker-style) ---------- */
+
+.cdr-field-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cdr-group {
+  border: 1px solid #e1dfdd;
+  border-radius: 10px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.cdr-group-toggle {
+  padding: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  background: #faf9f8;
+}
+
+.cdr-group-toggle::before {
+  content: "+";
+  margin-right: 8px;
+  color: #800000;
+  font-weight: 800;
+}
+
+.cdr-group-toggle.expanded::before {
+  content: "–";
+}
+
+.cdr-group-content {
+  display: none;
+  padding: 10px 12px 12px 12px;
+  border-top: 1px solid #e1dfdd;
+}
+
+.cdr-group-content.expanded {
+  display: block;
+}
+
+/* Fields inside tiers */
+.cdr-field {
+  padding: 10px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  border: 1px solid #edebe9;
+  background: #ffffff;
+}
+
+.cdr-field:hover {
+  border-color: rgba(128, 0, 0, 0.35);
+  background: rgba(128, 0, 0, 0.04);
+}
