@@ -203,7 +203,7 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
   const fields =
     "id,display_number,number,status," +
     "client{name,first_name,last_name}," +
-    "custom_field_values{value,custom_field{name},picklist_option{name}}";
+    "custom_field_values{value,custom_field{name}}";
 
   const url = `${BASE_URL}/.netlify/functions/clioMatters?query=${encodeURIComponent(
     matterNumber
@@ -254,14 +254,14 @@ function buildFieldBag(matter) {
   const custom = Object.create(null);
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
-  for (const cfv of cfvs) {
-    const label = cfv?.custom_field?.name ? String(cfv.custom_field.name).trim() : "";
-    if (!label) continue;
+for (const cfv of cfvs) {
+  const label = cfv?.custom_field?.name ? String(cfv.custom_field.name).trim() : "";
+  if (!label) continue;
 
-    const pick = cfv?.picklist_option?.name ? String(cfv.picklist_option.name).trim() : "";
-    const val = cfv?.value != null ? String(cfv.value).trim() : "";
-    custom[label] = pick || val || null;
-  }
+  const val = cfv?.value != null ? String(cfv.value).trim() : "";
+  custom[label] = val || null;
+}
+
 
   const client =
     (matter?.client?.name && String(matter.client.name).trim()) ||
