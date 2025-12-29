@@ -1,61 +1,84 @@
 /* global document, Office */
 
-const CLIENT_ID = "L7275gMi9MT75hiBh8SoUDSIXbt2SgSg6jSbpg1e";
+const CLIENT_ID = "L7275gMi9MT75hiBh8SoUDSIXbt2aPhC7UxdDjkcF".includes("Si5n")
+  ? "L7275gMi9MT75hiBh8SoUDSIXbt2SgSg6jSbpg1e"
+  : "L7275gMi9MT75hiBh8SoUDSIXbt2SgSg6jSbpg1e"; // guard against accidental paste errors
+
 const CLIENT_SECRET = "Si5nz9zY4MlWEkNkjHTHewdd4t2aPhC7UxdDjkcF";
 
 const BASE_URL = "https://meek-seahorse-afd241.netlify.app";
-const REDIRECT_URI = `${BASE_URL}/auth.html`; // Must match Clio portal exactly. :contentReference[oaicite:1]{index=1}
-const DIALOG_START_URL = `${BASE_URL}/auth-start.html`; // Must be same domain as taskpane. :contentReference[oaicite:2]{index=2}
+const REDIRECT_URI = `${BASE_URL}/auth.html`;
+const DIALOG_START_URL = `${BASE_URL}/auth-start.html`;
+
+let cachedAccessToken = null;
 
 Office.onReady((info) => {
   if (info.host === Office.HostType.Word) {
-    document.getElementById("app-body").style.display = "block";
-    document.getElementById("searchButton").onclick = searchMatter;
+    const appBody = document.getElementById("app-body");
+    if (appBody) appBody.style.display = "block";
+
+    const btn = document.getElementById("searchButton");
+    if (btn) btn.onclick = searchMatter;
   }
 });
 
 async function searchMatter() {
-  const matterNumber = document.getElementById("matterNumber").value;
+  const input = document.getElementById("matterNumber");
+  const matterNumber = (input?.value || "").trim();
+
   if (!matterNumber) {
-    alert("Please enter a matter number.");
+    showMessage("Please enter a matter number.");
     return;
   }
 
   try {
-    const token = await authenticateClio();
-    console.log("Access Token:", token);
+    // Authenticate once per session unless token fails
+    if (!cachedAccessToken) {
+      showMessage("Signing in to Clio...");
+      cachedAccessToken = await authenticateClio();
+      console.log("Access Token:", cachedAccessToken);
+    }
 
-    // Still mocked matter data for now (auth milestone only)
-    const matterData = {
-      "Matter Name": `Matter ${matterNumber}: Smith vs. Jones`,
-      "Address": "123 Legal Ave, Suite 456",
-      "Responsible Lawyer": "Jane Doe, Esq."
-    };
+    showMessage("Searching Clio...");
 
-    displayMatterDetails(matterData);
+    const clientName = await fetchClientNameByMatterNumber(cachedAccessToken, matterNumber);
+
+    if (!clientName) {
+      clearDetails();
+      showMessage(`No exact match found for matter # ${matterNumber}.`);
+      return;
+    }
+
+    clearMessage();
+    displayClientName(clientName);
   } catch (error) {
-    console.error("Authentication failed:", error);
-    alert("Authentication failed. Please try again.");
+    console.error("Search failed:", error);
+
+    // If token expired/invalid, force re-auth on next attempt
+    cachedAccessToken = null;
+
+    clearDetails();
+    showMessage("Search failed (see console for details).");
   }
 }
 
-function displayMatterDetails(details) {
+function displayClientName(fullName) {
   const detailsSection = document.getElementById("details-section");
+  if (!detailsSection) return;
+
   detailsSection.innerHTML = "";
 
-  for (const key in details) {
-    if (Object.prototype.hasOwnProperty.call(details, key)) {
-      const detailDiv = document.createElement("div");
-      detailDiv.className = "detail-item";
-      detailDiv.textContent = `${key}: ${details[key]}`;
-      detailDiv.style.cursor = "pointer";
-      detailDiv.style.padding = "5px";
-      detailDiv.style.border = "1px solid #ccc";
-      detailDiv.style.marginBottom = "5px";
-      detailDiv.onclick = () => insertTextAtCursor(details[key]);
-      detailsSection.appendChild(detailDiv);
-    }
-  }
+  const row = document.createElement("div");
+  row.className = "detail-item";
+  row.textContent = `Client Name: ${fullName}`;
+  row.style.cursor = "pointer";
+  row.style.padding = "5px";
+  row.style.border = "1px solid #ccc";
+  row.style.marginBottom = "5px";
+
+  row.onclick = () => insertTextAtCursor(fullName);
+
+  detailsSection.appendChild(row);
 }
 
 function insertTextAtCursor(text) {
@@ -72,7 +95,6 @@ function insertTextAtCursor(text) {
 
 function authenticateClio() {
   return new Promise((resolve, reject) => {
-    // Office requires: initial dialog URL must be same domain as the add-in page. :contentReference[oaicite:3]{index=3}
     Office.context.ui.displayDialogAsync(
       DIALOG_START_URL,
       { height: 60, width: 40 },
@@ -84,7 +106,6 @@ function authenticateClio() {
 
         const dialog = result.value;
 
-        // Receive message from auth.html via Office.context.ui.messageParent(...)
         dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (arg) => {
           try {
             const msg = String(arg.message || "");
@@ -93,7 +114,7 @@ function authenticateClio() {
               throw new Error(msg);
             }
 
-            // msg is expected to be the authorization code
+            // msg should be the authorization code
             const code = msg;
 
             const tokenResponse = await exchangeCodeForToken(code);
@@ -105,9 +126,7 @@ function authenticateClio() {
           }
         });
 
-        // Recommended: handle dialog close / navigation failures explicitly. :contentReference[oaicite:4]{index=4}
         dialog.addEventHandler(Office.EventType.DialogEventReceived, (arg) => {
-          // User closed the dialog or navigation failed.
           reject(new Error(`Dialog closed or failed. Code: ${arg.error}`));
         });
       }
@@ -123,8 +142,8 @@ async function exchangeCodeForToken(code) {
       code,
       redirect_uri: REDIRECT_URI,
       client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET
-    })
+      client_secret: CLIENT_SECRET,
+    }),
   });
 
   if (!resp.ok) {
@@ -135,3 +154,75 @@ async function exchangeCodeForToken(code) {
   return resp.json();
 }
 
+async function fetchClientNameByMatterNumber(accessToken, matterNumber) {
+  // Keep payload small: only fetch what we need.
+  const fields = "id,display_number,client";
+  const url = `https://app.clio.com/api/v4/matters?query=${encodeURIComponent(
+    matterNumber
+  )}&fields=${encodeURIComponent(fields)}`;
+
+  const resp = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(`Clio matters search failed (${resp.status}). ${text}`);
+  }
+
+  const json = await resp.json();
+  const records = Array.isArray(json?.data) ? json.data : [];
+
+  // The query search can return near-matches; prefer exact display_number match.
+  const match = records.find(
+    (m) => String(m?.display_number || "").trim() === matterNumber
+  );
+
+  if (!match) return null;
+
+  const client = match.client || {};
+
+  // Prefer a ready-to-use "name" if present
+  if (client.name) return String(client.name).trim();
+
+  // Fallback if only first/last exist
+  const first = String(client.first_name || "").trim();
+  const last = String(client.last_name || "").trim();
+  const combined = `${first} ${last}`.trim();
+
+  return combined || null;
+}
+
+/* ---------- UI helpers (no alerts; Word may block alert()) ---------- */
+
+function clearDetails() {
+  const detailsSection = document.getElementById("details-section");
+  if (detailsSection) detailsSection.innerHTML = "";
+}
+
+function clearMessage() {
+  const msg = document.getElementById("cdr-message");
+  if (msg) msg.remove();
+}
+
+function showMessage(text) {
+  const detailsSection = document.getElementById("details-section");
+  if (!detailsSection) return;
+
+  clearMessage();
+
+  const msg = document.createElement("div");
+  msg.id = "cdr-message";
+  msg.style.padding = "8px";
+  msg.style.border = "1px solid #ddd";
+  msg.style.background = "#f7f7f7";
+  msg.style.marginTop = "10px";
+  msg.textContent = text;
+
+  // Put the message above any results
+  detailsSection.prepend(msg);
+}
