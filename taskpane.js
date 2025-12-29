@@ -1,9 +1,6 @@
 /* global document, Office */
 
-const CLIENT_ID = "L7275gMi9MT75hiBh8SoUDSIXbt2aPhC7UxdDjkcF".includes("Si5n")
-  ? "L7275gMi9MT75hiBh8SoUDSIXbt2SgSg6jSbpg1e"
-  : "L7275gMi9MT75hiBh8SoUDSIXbt2SgSg6jSbpg1e"; // guard against accidental paste errors
-
+const CLIENT_ID = "L7275gMi9MT75hiBh8SoUDSIXbt2SgSg6jSbpg1e";
 const CLIENT_SECRET = "Si5nz9zY4MlWEkNkjHTHewdd4t2aPhC7UxdDjkcF";
 
 const BASE_URL = "https://meek-seahorse-afd241.netlify.app";
@@ -13,16 +10,15 @@ const DIALOG_START_URL = `${BASE_URL}/auth-start.html`;
 let cachedAccessToken = null;
 
 Office.onReady((info) => {
-  if (info.host === Office.HostType.Word) {
-    const appBody = document.getElementById("app-body");
-    if (appBody) appBody.style.display = "block";
+  if (info.host !== Office.HostType.Word) return;
 
-    const btn = document.getElementById("searchButton");
-    if (btn) btn.onclick = searchMatter;
-  }
-});
+  const appBody = document.getElementById("app-body");
+  if (appBody) appBody.style.display = "block";
 
-document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("searchButton");
+  if (btn) btn.onclick = searchMatter;
+
+  // Collapsible tiers (wire after Office is ready)
   document.querySelectorAll(".cdr-group-toggle").forEach((toggle) => {
     toggle.addEventListener("click", () => {
       toggle.classList.toggle("expanded");
@@ -61,17 +57,18 @@ async function searchMatter() {
 
     clearMessage();
     displayClientName(clientName);
-} catch (error) {
-  console.error("Search failed:", error);
+  } catch (error) {
+    console.error("Search failed:", error);
 
-  // Only force re-auth if the token was rejected (typically 401).
-  const msg = String(error || "");
-  if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
-    cachedAccessToken = null;
+    // Only force re-auth if the token was rejected (typically 401).
+    const msg = String(error || "");
+    if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
+      cachedAccessToken = null;
+    }
+
+    clearDetails();
+    showMessage("Search failed (see console for details).");
   }
-
-  clearDetails();
-  showMessage("Search failed (see console for details).");
 }
 
 function displayClientName(fullName) {
@@ -83,10 +80,6 @@ function displayClientName(fullName) {
   const row = document.createElement("div");
   row.className = "detail-item";
   row.textContent = `Client Name: ${fullName}`;
-  row.style.cursor = "pointer";
-  row.style.padding = "5px";
-  row.style.border = "1px solid #ccc";
-  row.style.marginBottom = "5px";
 
   row.onclick = () => insertTextAtCursor(fullName);
 
@@ -204,7 +197,6 @@ async function fetchClientNameByMatterNumber(accessToken, matterNumber) {
 
   return combined || null;
 }
-
 
 /* ---------- UI helpers (no alerts; Word may block alert()) ---------- */
 
