@@ -1,19 +1,21 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
-           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
-           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
-           xsi:type="TaskPaneApp">
-  <Id>f48abeb5-2780-40ae-b89c-f15b21af97d9</Id>
-  <Version>1.0.1.2</Version>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+
+  <Id>ace0f9ed-002a-43a9-a9af-1c4b1c806595</Id>
+  <Version>1.0.0.0</Version>
   <ProviderName>CDR Law</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="CDR Clio"/>
-  <Description DefaultValue="Insert Clio matter data into Word."/>
+  <DisplayName DefaultValue="CDR Clio Toolbar"/>
+  <Description DefaultValue="Search Clio matters and insert details into Word."/>
 
   <IconUrl DefaultValue="https://meek-seahorse-afd241.netlify.app/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://meek-seahorse-afd241.netlify.app/assets/icon-64.png"/>
-  <SupportUrl DefaultValue="https://meek-seahorse-afd241.netlify.app"/>
+  <SupportUrl DefaultValue="https://cdrlaw.ca/"/>
 
   <AppDomains>
     <AppDomain>https://meek-seahorse-afd241.netlify.app</AppDomain>
@@ -25,20 +27,12 @@
   </Hosts>
 
   <DefaultSettings>
-    <!-- Point to actual task pane file under /src/... -->
-    <SourceLocation DefaultValue="https://meek-seahorse-afd241.netlify.app/src/taskpane/taskpane.html"/>
+    <SourceLocation DefaultValue="https://meek-seahorse-afd241.netlify.app/taskpane.html"/>
   </DefaultSettings>
 
   <Permissions>ReadWriteDocument</Permissions>
 
-  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
-                    xsi:type="VersionOverridesV1_0">
-    <Requirements>
-      <bt:Sets DefaultMinVersion="1.1">
-        <bt:Set Name="DialogApi" MinVersion="1.1"/>
-      </bt:Sets>
-    </Requirements>
-
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
       <Host xsi:type="Document">
         <DesktopFormFactor>
@@ -59,6 +53,7 @@
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
+
                 <Control xsi:type="Button" id="TaskpaneButton">
                   <Label resid="TaskpaneButton.Label"/>
                   <Supertip>
@@ -75,6 +70,7 @@
                     <SourceLocation resid="Taskpane.Url"/>
                   </Action>
                 </Control>
+
               </Group>
             </OfficeTab>
           </ExtensionPoint>
@@ -90,21 +86,20 @@
       </bt:Images>
 
       <bt:Urls>
-        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://meek-seahorse-afd241.netlify.app"/>
-        <!-- Commands page under /src/... (adjust if your path differs) -->
-        <bt:Url id="Commands.Url" DefaultValue="https://meek-seahorse-afd241.netlify.app/src/commands/commands.html"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://meek-seahorse-afd241.netlify.app/src/taskpane/taskpane.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://meek-seahorse-afd241.netlify.app/commands.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://meek-seahorse-afd241.netlify.app/taskpane.html"/>
       </bt:Urls>
 
       <bt:ShortStrings>
-        <bt:String id="GetStarted.Title" DefaultValue="CDR Clio"/>
-        <bt:String id="CommandsGroup.Label" DefaultValue="CDR Clio"/>
-        <bt:String id="TaskpaneButton.Label" DefaultValue="Clio"/>
+        <bt:String id="GetStarted.Title" DefaultValue="Get started with CDR Clio!"/>
+        <bt:String id="CommandsGroup.Label" DefaultValue="Clio Tools"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="Show Clio Sidebar"/>
       </bt:ShortStrings>
 
       <bt:LongStrings>
-        <bt:String id="GetStarted.Description" DefaultValue="Open the task pane to connect to Clio and insert matter data."/>
-        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open CDR Clio task pane"/>
+        <bt:String id="GetStarted.Description" DefaultValue="Success! Click the 'Show Clio Sidebar' button in the Home tab to begin."/>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open the Clio Matter Search Pane"/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
