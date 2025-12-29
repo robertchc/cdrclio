@@ -116,18 +116,15 @@ function authenticateClio() {
 }
 
 async function exchangeCodeForToken(code) {
-  // Clio token exchange: POST https://app.clio.com/oauth/token with x-www-form-urlencoded body. :contentReference[oaicite:5]{index=5}
-  const body = new URLSearchParams();
-  body.set("client_id", CLIENT_ID);
-  body.set("client_secret", CLIENT_SECRET);
-  body.set("grant_type", "authorization_code");
-  body.set("code", code);
-  body.set("redirect_uri", REDIRECT_URI);
-
-  const resp = await fetch("https://app.clio.com/oauth/token", {
+  const resp = await fetch(`${BASE_URL}/.netlify/functions/clioToken`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString()
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      code,
+      redirect_uri: REDIRECT_URI,
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET
+    })
   });
 
   if (!resp.ok) {
@@ -137,3 +134,4 @@ async function exchangeCodeForToken(code) {
 
   return resp.json();
 }
+
