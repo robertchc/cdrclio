@@ -7,6 +7,10 @@ const BASE_URL = "https://meek-seahorse-afd241.netlify.app";
 const REDIRECT_URI = `${BASE_URL}/auth.html`;
 const DIALOG_START_URL = `${BASE_URL}/auth-start.html`;
 
+// Netlify functions
+const LIST_FN = `${BASE_URL}/.netlify/functions/clioMatters`;       // list search
+const DETAIL_FN = `${BASE_URL}/.netlify/functions/clioMatterById`;  // single matter by id (you must create this)
+
 let cachedAccessToken = null;
 let currentMatter = null;
 
@@ -101,7 +105,7 @@ function renderFields() {
     const key = el.getAttribute("data-field");
     if (!key) return;
 
-    // preserve original label text once
+    // Preserve original label text once
     if (!el.dataset.label) el.dataset.label = el.textContent.trim();
     const label = el.dataset.label;
 
@@ -195,21 +199,18 @@ async function exchangeCodeForToken(code) {
 }
 
 /**
- * Pulls matter + custom fields and builds the field bag.
- * Key fix: tolerant matching + sensible fallback.
+ * Two-step fetch:
+ *  1) Search list endpoint for id/display_number/client
+ *  2) Fetch single matter by id with custom_field_values (Clio allows this on /matters/{id})
  */
 async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
-  // Keep this conservative. Add more later once we confirm response shapes in your tenant.
-  const fields =
-    "id,display_number,number,status," +
-    "client{name,first_name,last_name}," +
-    "custom_field_values{value,custom_field{name}}";
+  // 1) LIST SEARCH (no custom_field_values here; your tenant rejects it on the list endpoint)
+  const listFields = "id,display_number,client{name,first_name,last_name},status";
+  const listUrl =
+    `${LIST_FN}?query=${encodeURIComponent(matterNumber)}` +
+    `&fields=${encodeURIComponent(listFields)}`;
 
-  const url = `${BASE_URL}/.netlify/functions/clioMatters?query=${encodeURIComponent(
-    matterNumber
-  )}&fields=${encodeURIComponent(fields)}`;
-
-  const resp = await fetch(url, {
+  const listResp = await fetch(listUrl, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -217,51 +218,76 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
     },
   });
 
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(`Matters lookup failed (${resp.status}). ${text}`);
+  if (!listResp.ok) {
+    const text = await listResp.text().catch(() => "");
+    throw new Error(`Matters lookup failed (${listResp.status}). ${text}`);
   }
 
-  const json = await resp.json();
-  const records = Array.isArray(json?.data) ? json.data : [];
-
+  const listJson = await listResp.json();
+  const records = Array.isArray(listJson?.data) ? listJson.data : [];
   if (!records.length) return null;
 
   // Tolerant match helpers
   const norm = (s) => String(s || "").trim();
-  const digits = (s) => norm(s).replace(/\D/g, ""); // keep only digits
+  const digits = (s) => norm(s).replace(/\D/g, "");
 
   const target = norm(matterNumber);
   const targetDigits = digits(matterNumber);
 
-  // Prefer exact display_number match
-  let match =
+  const match =
     records.find((m) => norm(m?.display_number) === target) ||
-    // Then match by digits-only (handles weird formatting)
     records.find((m) => digits(m?.display_number) === targetDigits) ||
-    // Then "startsWith" (common if Clio includes suffix/prefix)
     records.find((m) => norm(m?.display_number).startsWith(target)) ||
-    records.find((m) => digits(m?.display_number).startsWith(targetDigits));
+    records.find((m) => digits(m?.display_number).startsWith(targetDigits)) ||
+    records[0];
 
-  // If still no match, but you searched a unique matter number,
-  // take the first result (better UX than “nothing found” when Clio actually returned it).
-  if (!match) match = records[0];
+  const matterId = match?.id;
+  if (!matterId) return null;
 
-  return buildFieldBag(match);
+  // 2) DETAIL FETCH (custom_field_values is valid here)
+  const detailFields =
+    "id,display_number,number,status," +
+    "client{name,first_name,last_name}," +
+    "custom_field_values{id,value,custom_field}";
+
+  const detailUrl =
+    `${DETAIL_FN}?id=${encodeURIComponent(matterId)}` +
+    `&fields=${encodeURIComponent(detailFields)}`;
+
+  const detailResp = await fetch(detailUrl, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!detailResp.ok) {
+    const text = await detailResp.text().catch(() => "");
+    throw new Error(`Matter detail failed (${detailResp.status}). ${text}`);
+  }
+
+  const detailJson = await detailResp.json();
+  const matter = detailJson?.data;
+  if (!matter) return null;
+
+  return buildFieldBag(matter);
 }
 
 function buildFieldBag(matter) {
-  const custom = Object.create(null);
+  // custom_field_values come back with custom_field{id} and value.
+  // We cannot reliably map “Court File No. (Pleadings)” etc without
+  // knowing your custom field IDs, so we store by ID for now.
+  const customById = Object.create(null);
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
-for (const cfv of cfvs) {
-  const label = cfv?.custom_field?.name ? String(cfv.custom_field.name).trim() : "";
-  if (!label) continue;
+  for (const cfv of cfvs) {
+    const id = cfv?.custom_field?.id;
+    if (!id) continue;
 
-  const val = cfv?.value != null ? String(cfv.value).trim() : "";
-  custom[label] = val || null;
-}
-
+    const val = cfv?.value != null ? String(cfv.value).trim() : "";
+    customById[String(id)] = val || null;
+  }
 
   const client =
     (matter?.client?.name && String(matter.client.name).trim()) ||
@@ -269,38 +295,41 @@ for (const cfv of cfvs) {
     null;
 
   return {
-    // Tier 1
+    // What we can fill confidently right now
     client_name: client,
-    adverse_party_name: custom["Adverse Party Name"] || null,
-    case_name: custom["Case Name (a v. b)"] || null,
-    court_file_no: custom["Court File No. (Pleadings)"] || null,
-    court_name: custom["Court (pleadings)"] || null,
-
-    // Tier 2
-    date_of_separation: custom["Date of Separation"] || null,
-    date_of_marriage: custom["Date of Marriage"] || null,
-    date_of_divorce: custom["Date of Divorce"] || null,
-    date_of_most_recent_order: custom["Date of Most Recent Order"] || null,
-    type_of_most_recent_order: custom["Type of Most Recent Order"] || null,
-    judge_name: custom["Judge Name ie. Justice Jim Doe"] || null,
-    your_honour: custom["My Lord/Lady/Your Honour"] || null,
-
-    // Tier 3
     matter_number: matter?.display_number ? String(matter.display_number).trim() : null,
     matter_status: matter?.status ? String(matter.status).trim() : null,
-    matter_stage: custom["Matter stage"] || null,
-    responsible_attorney: custom["Responsible Attorney"] || null,
-    originating_attorney: custom["Originating Attorney"] || null,
-    opposing_counsel: custom["Opposing Counsel"] || null,
+
+    // Tier 1 (placeholders until we map custom field IDs)
+    adverse_party_name: null,
+    case_name: null,
+    court_file_no: null,
+    court_name: null,
+
+    // Tier 2
+    date_of_separation: null,
+    date_of_marriage: null,
+    date_of_divorce: null,
+    date_of_most_recent_order: null,
+    type_of_most_recent_order: null,
+    judge_name: null,
+    your_honour: null,
+
+    // Tier 3
+    practice_area: null,
+    matter_stage: null,
+    responsible_attorney: null,
+    originating_attorney: null,
+    opposing_counsel: null,
 
     // Tier 4
-    matrimonial_status: custom["Matrimonial Status"] || null,
-    cohabitation_begin_date: custom["Co-Habitation Begin Date"] || null,
-    common_law_begin_date: custom["Spousal Common-Law Begin Date"] || null,
-    place_of_marriage: custom["Place of Marriage"] || null,
-    adverse_dob: custom["Adverse DOB"] || null,
+    matrimonial_status: null,
+    cohabitation_begin_date: null,
+    common_law_begin_date: null,
+    place_of_marriage: null,
+    adverse_dob: null,
 
-    __custom: custom,
+    __custom_by_id: customById,
   };
 }
 
