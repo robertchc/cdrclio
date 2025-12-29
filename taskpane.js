@@ -8,8 +8,6 @@ const REDIRECT_URI = `${BASE_URL}/auth.html`;
 const DIALOG_START_URL = `${BASE_URL}/auth-start.html`;
 
 let cachedAccessToken = null;
-
-// Holds the currently-loaded matter's fields, keyed by the data-field values in your HTML
 let currentMatter = null;
 
 Office.onReady((info) => {
@@ -21,7 +19,7 @@ Office.onReady((info) => {
   const btn = document.getElementById("searchButton");
   if (btn) btn.onclick = searchMatter;
 
-  // Collapsible tiers (wire after Office is ready)
+  // Collapsible tiers
   document.querySelectorAll(".cdr-group-toggle").forEach((toggle) => {
     toggle.addEventListener("click", () => {
       toggle.classList.toggle("expanded");
@@ -30,21 +28,24 @@ Office.onReady((info) => {
     });
   });
 
-  // Field buttons: click to insert loaded matter data
+  // Click-to-insert fields
   document.querySelectorAll(".cdr-field").forEach((el) => {
     el.addEventListener("click", () => {
       const key = el.getAttribute("data-field");
       if (!key) return;
 
       const value = currentMatter?.[key];
-      if (value == null || String(value).trim() === "") {
-        showMessage("That field isn’t available for this matter yet. Search a matter first.");
+      if (value == null || String(value).trim() === "" || String(value).trim() === "—") {
+        showMessage("No value available for that field on this matter.");
         return;
       }
 
       insertTextAtCursor(String(value));
     });
   });
+
+  // Ensure placeholders show before first search
+  renderFields();
 });
 
 async function searchMatter() {
@@ -57,7 +58,6 @@ async function searchMatter() {
   }
 
   try {
-    // Authenticate once per session unless token fails
     if (!cachedAccessToken) {
       showMessage("Signing in to Clio...");
       cachedAccessToken = await authenticateClio();
@@ -70,53 +70,44 @@ async function searchMatter() {
 
     if (!fieldBag) {
       currentMatter = null;
-      clearDetails();
-      showMessage(`No exact match found for matter # ${matterNumber}.`);
-      renderFields(); // clears visible values
+      renderFields();
+      showMessage(`No match found for matter # ${matterNumber}.`);
       return;
     }
 
     currentMatter = fieldBag;
-
-    // Populate values under each label
     renderFields();
-
     clearMessage();
   } catch (error) {
     console.error("Search failed:", error);
 
-    // Only force re-auth if the token was rejected (typically 401).
     const msg = String(error || "");
     if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
       cachedAccessToken = null;
     }
 
     currentMatter = null;
-    clearDetails();
-    renderFields(); // clears visible values
+    renderFields();
     showMessage("Search failed (see console for details).");
   }
 }
 
 /**
- * Updates the UI so each .cdr-field shows its value under the label:
- * Label
- *   value (or em-dash if missing)
+ * Shows the value under each label in the tier list.
+ * (These are still clickable to insert.)
  */
 function renderFields() {
   document.querySelectorAll(".cdr-field").forEach((el) => {
     const key = el.getAttribute("data-field");
     if (!key) return;
 
-    // Preserve the original label text (first time only)
-    if (!el.dataset.label) {
-      el.dataset.label = el.textContent.trim();
-    }
-
+    // preserve original label text once
+    if (!el.dataset.label) el.dataset.label = el.textContent.trim();
     const label = el.dataset.label;
-    const value = currentMatter?.[key];
 
-    // Build a clean two-line layout
+    const value = currentMatter?.[key];
+    const display = value == null || String(value).trim() === "" ? "—" : String(value);
+
     el.innerHTML = "";
 
     const labelDiv = document.createElement("div");
@@ -125,17 +116,13 @@ function renderFields() {
 
     const valueDiv = document.createElement("div");
     valueDiv.className = "cdr-field-value";
-    valueDiv.textContent = value == null || String(value).trim() === "" ? "—" : String(value);
+    valueDiv.textContent = display;
 
     el.appendChild(labelDiv);
     el.appendChild(valueDiv);
 
-    // Add a subtle state cue
-    if (valueDiv.textContent === "—") {
-      el.classList.add("cdr-field-empty");
-    } else {
-      el.classList.remove("cdr-field-empty");
-    }
+    if (display === "—") el.classList.add("cdr-field-empty");
+    else el.classList.remove("cdr-field-empty");
   });
 }
 
@@ -167,14 +154,9 @@ function authenticateClio() {
         dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (arg) => {
           try {
             const msg = String(arg.message || "");
+            if (msg.startsWith("error:")) throw new Error(msg);
 
-            if (msg.startsWith("error:")) {
-              throw new Error(msg);
-            }
-
-            // msg should be the authorization code
             const code = msg;
-
             const tokenResponse = await exchangeCodeForToken(code);
             resolve(tokenResponse.access_token);
           } catch (e) {
@@ -213,17 +195,14 @@ async function exchangeCodeForToken(code) {
 }
 
 /**
- * Loads the matter record (core + custom fields) and returns a "field bag"
- * keyed by your taskpane data-field values.
+ * Pulls matter + custom fields and builds the field bag.
+ * Key fix: tolerant matching + sensible fallback.
  */
 async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
-  // Core + custom fields (custom_field_values are where your export-style columns live)
+  // Keep this conservative. Add more later once we confirm response shapes in your tenant.
   const fields =
-    "id,display_number,number,custom_number,description,status," +
+    "id,display_number,number,status," +
     "client{name,first_name,last_name}," +
-    "practice_area{name}," +
-    "originating_attorney{name,first_name,last_name}," +
-    "responsible_attorney{name,first_name,last_name}," +
     "custom_field_values{value,custom_field{name},picklist_option{name}}";
 
   const url = `${BASE_URL}/.netlify/functions/clioMatters?query=${encodeURIComponent(
@@ -246,15 +225,32 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
   const json = await resp.json();
   const records = Array.isArray(json?.data) ? json.data : [];
 
-  // Exact match on display_number (matches your current workflow)
-  const match = records.find((m) => String(m?.display_number || "").trim() === matterNumber);
-  if (!match) return null;
+  if (!records.length) return null;
+
+  // Tolerant match helpers
+  const norm = (s) => String(s || "").trim();
+  const digits = (s) => norm(s).replace(/\D/g, ""); // keep only digits
+
+  const target = norm(matterNumber);
+  const targetDigits = digits(matterNumber);
+
+  // Prefer exact display_number match
+  let match =
+    records.find((m) => norm(m?.display_number) === target) ||
+    // Then match by digits-only (handles weird formatting)
+    records.find((m) => digits(m?.display_number) === targetDigits) ||
+    // Then "startsWith" (common if Clio includes suffix/prefix)
+    records.find((m) => norm(m?.display_number).startsWith(target)) ||
+    records.find((m) => digits(m?.display_number).startsWith(targetDigits));
+
+  // If still no match, but you searched a unique matter number,
+  // take the first result (better UX than “nothing found” when Clio actually returned it).
+  if (!match) match = records[0];
 
   return buildFieldBag(match);
 }
 
 function buildFieldBag(matter) {
-  // Build a label -> value dictionary from Clio custom fields
   const custom = Object.create(null);
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
@@ -272,23 +268,6 @@ function buildFieldBag(matter) {
     `${String(matter?.client?.first_name || "").trim()} ${String(matter?.client?.last_name || "").trim()}`.trim() ||
     null;
 
-  const practiceArea = matter?.practice_area?.name ? String(matter.practice_area.name).trim() : null;
-
-  const responsible =
-    (matter?.responsible_attorney?.name && String(matter.responsible_attorney.name).trim()) ||
-    `${String(matter?.responsible_attorney?.first_name || "").trim()} ${String(
-      matter?.responsible_attorney?.last_name || ""
-    ).trim()}`.trim() ||
-    null;
-
-  const originating =
-    (matter?.originating_attorney?.name && String(matter.originating_attorney.name).trim()) ||
-    `${String(matter?.originating_attorney?.first_name || "").trim()} ${String(
-      matter?.originating_attorney?.last_name || ""
-    ).trim()}`.trim() ||
-    null;
-
-  // Map to your taskpane's data-field keys
   return {
     // Tier 1
     client_name: client,
@@ -308,11 +287,10 @@ function buildFieldBag(matter) {
 
     // Tier 3
     matter_number: matter?.display_number ? String(matter.display_number).trim() : null,
-    practice_area: practiceArea,
     matter_status: matter?.status ? String(matter.status).trim() : null,
     matter_stage: custom["Matter stage"] || null,
-    responsible_attorney: responsible,
-    originating_attorney: originating,
+    responsible_attorney: custom["Responsible Attorney"] || null,
+    originating_attorney: custom["Originating Attorney"] || null,
     opposing_counsel: custom["Opposing Counsel"] || null,
 
     // Tier 4
@@ -322,17 +300,11 @@ function buildFieldBag(matter) {
     place_of_marriage: custom["Place of Marriage"] || null,
     adverse_dob: custom["Adverse DOB"] || null,
 
-    // keep full custom map for easy expansion/debug
     __custom: custom,
   };
 }
 
-/* ---------- UI helpers (no alerts; Word may block alert()) ---------- */
-
-function clearDetails() {
-  const detailsSection = document.getElementById("details-section");
-  if (detailsSection) detailsSection.innerHTML = "";
-}
+/* ---------- UI helpers ---------- */
 
 function clearMessage() {
   const msg = document.getElementById("cdr-message");
@@ -353,6 +325,5 @@ function showMessage(text) {
   msg.style.marginTop = "10px";
   msg.textContent = text;
 
-  // Put the message above any results
   detailsSection.prepend(msg);
 }
