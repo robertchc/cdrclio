@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Clio Authentication</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script>
+    Office.onReady(() => {
+      const qs = new URLSearchParams(window.location.search);
+
+      const error = qs.get("error");
+      const errorDescription = qs.get("error_description");
+      if (error) {
+        Office.context.ui.messageParent(`error: ${error}${errorDescription ? " - " + errorDescription : ""}`);
+        return;
+      }
+
+      const code = qs.get("code");
+      if (code) {
+        Office.context.ui.messageParent(code);
+      } else {
+        Office.context.ui.messageParent("error: No authorization code found");
+      }
+    });
+  </script>
+</head>
+<body>
+  <p>Authenticating with Clio...</p>
+</body>
+</html>

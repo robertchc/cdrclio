@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Start Clio Auth</title>
+</head>
+<body>
+  <script>
+    (function () {
+      const CLIENT_ID = "L7275gMi9MT75hiBh8SoUDSIXbt2SgSg6jSbpg1e";
+      const REDIRECT_URI = "https://meek-seahorse-afd241.netlify.app/auth.html";
+
+      // Optional but recommended in OAuth; included in Clio docs. :contentReference[oaicite:7]{index=7}
+      const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+      const params = new URLSearchParams({
+        response_type: "code",          // Clio requires code flow. :contentReference[oaicite:8]{index=8}
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        state: state,
+        redirect_on_decline: "true"
+      });
+
+      window.location.replace("https://app.clio.com/oauth/authorize?" + params.toString());
+    })();
+  </script>
+</body>
+</html>
