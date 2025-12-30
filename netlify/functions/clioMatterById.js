@@ -41,23 +41,16 @@ exports.handler = async (event) => {
       };
     }
 
-    // IMPORTANT: keep fields conservative; do NOT use nested braces here.
-    // We'll fetch custom field definitions separately if needed.
-    const fields =
-      event.queryStringParameters?.fields ||
-      "id,display_number,number,status,client,custom_field_values";
+    /**
+     * SURGICAL FIX: 
+     * We allow the nested braces {...} for custom_field_values. 
+     * This ensures we get the 'custom_field: { id }' so the taskpane 
+     * can match values to their names.
+     */
+    const fields = event.queryStringParameters?.fields || 
+                   "id,display_number,status,client,practice_area{name},custom_field_values{id,value,picklist_option,custom_field{id}}";
 
-    // Strip anything after "custom_field_values" if the caller tries to pass nested fields.
-    // This prevents Clio from rejecting it.
-    const safeFields = fields.includes("custom_field_values")
-      ? fields
-          .replace(/custom_field_values\{.*$/i, "custom_field_values")
-          .replace(/,+\s*$/, "")
-      : fields;
-
-    const url =
-      `https://app.clio.com/api/v4/matters/${encodeURIComponent(id)}.json` +
-      `?fields=${encodeURIComponent(safeFields)}`;
+    const url = `https://app.clio.com/api/v4/matters/${encodeURIComponent(id)}.json?fields=${encodeURIComponent(fields)}`;
 
     const resp = await fetch(url, {
       method: "GET",
