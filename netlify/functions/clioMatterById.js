@@ -3,24 +3,13 @@ const fetch = require("node-fetch");
 exports.handler = async (event) => {
   try {
     const { id } = event.queryStringParameters;
-    if (!id) return { statusCode: 400, body: JSON.stringify({ error: "No ID" }) };
+    if (!id) return { statusCode: 400, body: JSON.stringify({ error: "Missing ID" }) };
 
-    // INDIVIDUAL REQUEST STRATEGY: 
-    // We list every sub-property we need one by one.
-    const fields = [
-      "id",
-      "display_number",
-      "status",
-      "client.name",
-      "practice_area.name",
-      "custom_field_values.id",
-      "custom_field_values.value",
-      "custom_field_values.picklist_option.option",
-      "custom_field_values.picklist_option.name",
-      "custom_field_values.custom_field.id",
-      "custom_field_values.custom_field.name"
-    ].join(",");
+    // Clio ONLY accepts nested braces for sub-properties. 
+    // We request every specific key-value pair here.
+    const fields = "id,display_number,status,client{name},practice_area{name},custom_field_values{id,value,picklist_option{option,name},custom_field{id,name}}";
 
+    // Build the URL manually. No encoding on the braces.
     const clioUrl = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
 
     const response = await fetch(clioUrl, {
@@ -34,10 +23,10 @@ exports.handler = async (event) => {
     const data = await response.json();
 
     return {
-      statusCode: 200,
-      headers: { 
+      statusCode: response.status,
+      headers: {
         "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json" 
+        "Content-Type": "application/json"
       },
       body: JSON.stringify(data)
     };
