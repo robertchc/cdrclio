@@ -81,8 +81,11 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
   if (!records.length) return null;
 
   const matterId = records[0]?.id;
-  const detailFields = "id,display_number,status,client{name},practice_area{name},custom_field_values{id,value,picklist_option,custom_field{id,name}}";
-  const detailUrl = `${DETAIL_FN}?id=${encodeURIComponent(matterId)}&fields=${encodeURIComponent(detailFields)}`;
+  // Simplified flat string to avoid encoding/bracket errors
+  const detailFields = "id,display_number,status,client,practice_area,custom_field_values";
+  
+  // Build the URL without extra braces that might break during transmission
+  const detailUrl = `${DETAIL_FN}?id=${matterId}&fields=${detailFields}`;
 
   const detailResp = await fetch(detailUrl, {
     method: "GET",
