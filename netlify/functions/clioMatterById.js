@@ -2,15 +2,26 @@ const fetch = require("node-fetch");
 
 exports.handler = async (event) => {
   try {
-    const { id, fields } = event.queryStringParameters;
-    
-    if (!id) return { statusCode: 400, body: JSON.stringify({ error: "Missing ID" }) };
+    const { id } = event.queryStringParameters;
+    if (!id) return { statusCode: 400, body: JSON.stringify({ error: "No ID" }) };
 
-    // Clean the fields string to remove anything that isn't a letter, number, or comma
-    const cleanFields = fields ? fields.replace(/[^a-z0-9,_]/gi, '') : "id,display_number";
+    // INDIVIDUAL REQUEST STRATEGY: 
+    // We list every sub-property we need one by one.
+    const fields = [
+      "id",
+      "display_number",
+      "status",
+      "client.name",
+      "practice_area.name",
+      "custom_field_values.id",
+      "custom_field_values.value",
+      "custom_field_values.picklist_option.option",
+      "custom_field_values.picklist_option.name",
+      "custom_field_values.custom_field.id",
+      "custom_field_values.custom_field.name"
+    ].join(",");
 
-    // Format the URL properly with the .json extension before the query
-    const clioUrl = `https://app.clio.com/api/v4/matters/${id}.json?fields=${cleanFields}`;
+    const clioUrl = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
 
     const response = await fetch(clioUrl, {
       method: "GET",
@@ -23,11 +34,10 @@ exports.handler = async (event) => {
     const data = await response.json();
 
     return {
-      statusCode: response.status,
-      headers: {
+      statusCode: 200,
+      headers: { 
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json" 
       },
       body: JSON.stringify(data)
     };
