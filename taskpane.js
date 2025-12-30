@@ -165,42 +165,39 @@ function buildFieldBag(matter, cfMap) {
   const custom = Object.create(null);
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
+  // DIAGNOSTIC: Let's see if we have ANY data
+  if (cfvs.length > 0) {
+     console.log("Found " + cfvs.length + " custom values");
+  }
+
   cfvs.forEach(cfv => {
-    // Attempt 1: Get the name directly from the API response (if provided)
-    // Attempt 2: Look up the name in the map using the ID
-    const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
-    const numericId = rawId.replace(/\D/g, ""); 
-    const meta = cfMap ? cfMap[numericId] : null;
+    // Clio v4: The ID of the definition is usually 'custom_field_definition_id' 
+    // or inside the 'custom_field' object.
+    const defId = cfv?.custom_field?.id || cfv?.custom_field_definition_id || cfv?.id;
+    const cleanId = String(defId || "").replace(/\D/g, "");
     
-    const name = cfv?.custom_field?.name || meta?.name;
+    // Check our 155-item dictionary
+    const meta = cfMap ? cfMap[cleanId] : null;
 
-    if (name) {
-      const key = name.toLowerCase().trim();
-      let val = null;
+    if (meta && meta.name) {
+      const key = meta.name.toLowerCase().trim();
+      let val = cfv.value;
 
-      // Handle the value based on type
-      if (cfv.value !== undefined && cfv.value !== null) {
-        if (typeof cfv.value === 'object') {
-          val = cfv.value.name || cfv.value.display_name || cfv.value.first_name || JSON.stringify(cfv.value);
-        } else {
-          val = cfv.value;
-        }
-      } else if (cfv.picklist_option) {
-        val = cfv.picklist_option.name || cfv.picklist_option.display_name;
+      // Handle objects
+      if (val && typeof val === "object") {
+        val = val.name || val.display_name || JSON.stringify(val);
       }
-
-      if (val !== null) {
-        custom[key] = String(val).trim();
-      }
+      
+      custom[key] = (val !== undefined && val !== null) ? String(val).trim() : null;
     }
   });
 
   const getCf = (name) => {
-    if (!name) return "—";
     const found = custom[name.toLowerCase().trim()];
     return (found && found !== "null") ? found : "—";
   };
 
+  // Return the standard bag
   return {
     client_name: matter.client?.name || "—",
     matter_number: matter.display_number || "—",
