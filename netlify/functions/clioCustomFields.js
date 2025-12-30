@@ -18,8 +18,8 @@ exports.handler = async (event) => {
     if (event.httpMethod !== "GET") {
       return {
         statusCode: 405,
-        headers: { ...corsHeaders(), "Content-Type": "text/plain" },
-        body: "Method Not Allowed",
+        headers: { ...corsHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ ok: false, status: 405, error: "Method Not Allowed" }),
       };
     }
 
@@ -27,12 +27,11 @@ exports.handler = async (event) => {
     if (!auth || !auth.startsWith("Bearer ")) {
       return {
         statusCode: 401,
-        headers: { ...corsHeaders(), "Content-Type": "text/plain" },
-        body: "Missing or invalid Authorization header",
+        headers: { ...corsHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ ok: false, status: 401, error: "Missing or invalid Authorization header" }),
       };
     }
 
-    // Keep it simple: just what we need to map IDs to names.
     const url =
       "https://app.clio.com/api/v4/custom_fields.json" +
       "?parent_type=matter" +
@@ -46,25 +45,37 @@ exports.handler = async (event) => {
     });
 
     const text = await resp.text();
-    const contentType = resp.headers.get("content-type") || "application/json";
 
-    // ---- LOGGING (what we actually need) ----
-    console.log("clioCustomFields status:", resp.status);
-    console.log("clioCustomFields content-type:", contentType);
-    console.log("clioCustomFields body (first 800):", text.slice(0, 800));
-    // ----------------------------------------
+    // Try to parse JSON; if it fails, keep raw text.
+    let parsed = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
 
+    // Always return JSON to the client (so your taskpane can display it)
     return {
-      statusCode: resp.status,
-      headers: { ...corsHeaders(), "Content-Type": contentType },
-      body: text,
+      statusCode: 200,
+      headers: { ...corsHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ok: resp.ok,
+        status: resp.status,
+        clio_content_type: resp.headers.get("content-type") || null,
+        preview: text.slice(0, 800),
+        data: parsed?.data || null,
+        error: parsed?.error || null,
+      }),
     };
   } catch (e) {
-    console.log("clioCustomFields error:", String(e));
     return {
-      statusCode: 500,
+      statusCode: 200,
       headers: { ...corsHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ error: String(e) }),
+      body: JSON.stringify({
+        ok: false,
+        status: 500,
+        error: String(e),
+      }),
     };
   }
 };
