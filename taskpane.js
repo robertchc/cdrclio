@@ -18,19 +18,23 @@ let customFieldsById = null;
 
 async function loadCustomFields(accessToken) {
     if (customFieldsById) return customFieldsById;
-    const resp = await fetch(CUSTOM_FIELDS_FN, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-    });
-    const json = await resp.json();
-    const rows = json.data || [];
-    const map = Object.create(null);
-    for (const cf of rows) {
-        if (!cf?.id) continue;
-        map[String(cf.id)] = { name: cf.name, type: cf.field_type };
+    try {
+        const resp = await fetch(CUSTOM_FIELDS_FN, {
+            method: "GET",
+            headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+        });
+        const json = await resp.json();
+        const rows = json.data || [];
+        const map = Object.create(null);
+        rows.forEach(cf => {
+            if (cf?.id) map[String(cf.id)] = { name: cf.name, type: cf.field_type };
+        });
+        customFieldsById = map;
+        return map;
+    } catch (e) {
+        console.error("Failed to load dictionary:", e);
+        return {};
     }
-    customFieldsById = map;
-    return map;
 }
 
 async function searchMatter() {
@@ -40,96 +44,96 @@ async function searchMatter() {
         showMessage("Please enter a matter number.");
         return;
     }
+
     try {
         if (!cachedAccessToken) {
             showMessage("Signing in to Clio...");
             cachedAccessToken = await authenticateClio();
         }
         
-        showMessage("Loading custom field dictionary...");
+        showMessage("Loading field dictionary...");
         customFieldsById = await loadCustomFields(cachedAccessToken);
 
-        showMessage("Searching Clio...");
+        showMessage(`Searching for ${matterNumber}...`);
         const matterData = await fetchFullMatterData(cachedAccessToken, matterNumber);
         
         if (!matterData) {
-            showMessage(`No match found for matter # ${matterNumber}.`);
-            return;
+            // If the exact search fails, try searching just the first part of the number
+            const partialSearch = matterNumber.split('-')[0];
+            showMessage(`Exact match failed. Trying partial search for ${partialSearch}...`);
+            const fallbackData = await fetchFullMatterData(cachedAccessToken, partialSearch);
+            
+            if (!fallbackData) {
+                showMessage(`No match found for "${matterNumber}".`);
+                return;
+            }
+            processMatterResults(fallbackData);
+        } else {
+            processMatterResults(matterData);
         }
         
-        // 1. Update the Debug Window with the full mapped list
-        updateDebugWindow(matterData, customFieldsById);
-
-        // 2. Map data to the UI fields
-        currentMatter = buildFieldBag(matterData, customFieldsById);
-        renderFields();
         clearMessage();
     } catch (error) {
-        console.error("Search failed:", error);
-        showMessage("Search failed: " + (error.message || "Unknown error"));
+        showMessage("Search error: " + error.message);
     }
 }
 
-async function fetchFullMatterData(accessToken, matterNumber) {
-    // Step A: Search for ID
-    const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}`;
-    const listResp = await fetch(listUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-    });
+async function fetchFullMatterData(accessToken, query) {
+    // 1. Get the list of matches
+    const listUrl = `${LIST_FN}?query=${encodeURIComponent(query)}`;
+    const listResp = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
     const listJson = await listResp.json();
     const records = listJson?.data || [];
     if (!records.length) return null;
 
-    const matterId = records[0]?.id;
-
-    // Step B: Fetch Single Resource (Full Details)
+    // 2. Take the first result and get the deep details
+    const matterId = records[0].id;
     const detailUrl = `${DETAIL_FN}?id=${matterId}`;
-    const detailResp = await fetch(detailUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const detailResp = await fetch(detailUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
     const detailJson = await detailResp.json();
     return detailJson.data;
 }
 
+function processMatterResults(matter) {
+    // 1. Update the Debug Window
+    updateDebugWindow(matter, customFieldsById);
+
+    // 2. Map to UI
+    currentMatter = buildFieldBag(matter, customFieldsById);
+    renderFields();
+}
+
 function buildFieldBag(matter, cfMap) {
     if (!matter) return null;
-    const custom = Object.create(null);
-    const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
+    const custom = {};
+    const cfvs = matter.custom_field_values || [];
 
     cfvs.forEach(cfv => {
         const rawId = String(cfv.id || "");
         const cleanId = rawId.includes("-") ? rawId.split("-")[1] : rawId;
-        
-        const meta = cfMap ? cfMap[cleanId] : null;
-        const name = meta?.name;
+        const name = cfMap[cleanId]?.name;
 
         if (name) {
             const key = name.toLowerCase().trim();
             let val = cfv.value;
-            if (!val && cfv.picklist_option) {
-                val = cfv.picklist_option.option || cfv.picklist_option.name;
-            }
-            if (val && typeof val === "object") {
-                val = val.name || val.display_name;
-            }
-            if (val !== null && val !== undefined) {
-                custom[key] = String(val).trim();
-            }
+            if (!val && cfv.picklist_option) val = cfv.picklist_option.option;
+            if (val && typeof val === "object") val = val.name || val.display_name;
+            custom[key] = String(val || "").trim();
         }
     });
 
-    const getCf = (name) => custom[name.toLowerCase().trim()] || "—";
+    const get = (n) => custom[n.toLowerCase().trim()] || "—";
 
     return {
         client_name: matter.client?.name || "—",
         matter_number: matter.display_number || "—",
         practice_area: matter.practice_area?.name || "—",
         matter_status: matter.status || "—",
-        adverse_party_name: getCf("Adverse Party Name"),
-        case_name: getCf("Case Name (a v. b)"),
-        court_file_no: getCf("Court File No. (Pleadings)"),
-        court_name: getCf("Court (pleadings)"),
-        judge_name: getCf("Judge Name")
+        adverse_party_name: get("Adverse Party Name"),
+        case_name: get("Case Name (a v. b)"),
+        court_file_no: get("Court File No. (Pleadings)"),
+        court_name: get("Court (pleadings)"),
+        judge_name: get("Judge Name")
     };
 }
 
@@ -137,44 +141,33 @@ function updateDebugWindow(matter, cfMap) {
     const debugEl = document.getElementById("debug-raw");
     if (!debugEl) return;
 
-    let report = `MATTER: ${matter.display_number}\n`;
-    report += `CLIENT: ${matter.client?.name || "Unknown"}\n`;
-    report += `------------------------------------------\n`;
+    let log = `MATTER: ${matter.display_number}\n`;
+    log += `----------------------------------\n`;
 
-    const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
-    if (cfvs.length > 0) {
-        cfvs.forEach(cfv => {
-            const rawId = String(cfv.id || "");
-            const cleanId = rawId.includes("-") ? rawId.split("-")[1] : rawId;
-            const fieldName = cfMap[cleanId]?.name || `ID: ${cleanId}`;
-            
-            let val = cfv.value;
-            if (!val && cfv.picklist_option) val = cfv.picklist_option.option;
-            if (val && typeof val === "object") val = val.name || val.display_name;
+    (matter.custom_field_values || []).forEach(cfv => {
+        const cleanId = String(cfv.id).split('-')[1] || cfv.id;
+        const name = cfMap[cleanId]?.name || `ID: ${cleanId}`;
+        let val = cfv.value || cfv.picklist_option?.option || "—";
+        log += `${name}: ${val}\n`;
+    });
 
-            report += `${fieldName}: ${val || "—"}\n`;
-        });
-    } else {
-        report += "No custom fields found in this matter record.";
-    }
-
-    debugEl.textContent = report;
+    debugEl.textContent = log;
 }
 
 function renderFields() {
     document.querySelectorAll(".cdr-field").forEach((el) => {
         const key = el.getAttribute("data-field");
-        const value = currentMatter?.[key];
-        const display = (value == null || value === "—") ? "—" : value;
-
+        const value = currentMatter?.[key] || "—";
         if (!el.dataset.label) el.dataset.label = el.textContent.trim();
         
-        el.innerHTML = `<div class="cdr-field-label">${el.dataset.label}</div><div class="cdr-field-value">${display}</div>`;
+        el.innerHTML = `<div class="cdr-field-label">${el.dataset.label}</div><div class="cdr-field-value">${value}</div>`;
         
-        if (display === "—") el.classList.add("cdr-field-empty");
+        if (value === "—") el.classList.add("cdr-field-empty");
         else el.classList.remove("cdr-field-empty");
     });
 }
+
+// --- AUTH & HELPERS ---
 
 function authenticateClio() {
     return new Promise((resolve, reject) => {
@@ -202,8 +195,8 @@ function showMessage(text) {
     clearMessage();
     const msg = document.createElement("div");
     msg.id = "cdr-message";
-    msg.style.padding = "8px";
-    msg.style.background = "#f3f2f1";
+    msg.style.padding = "10px";
+    msg.style.background = "#fff8dc";
     msg.textContent = text;
     details.prepend(msg);
 }
@@ -213,11 +206,10 @@ function clearMessage() {
     if (msg) msg.remove();
 }
 
-// --- BOOTSTRAP ---
+// --- INITIALIZE ---
 Office.onReady((info) => {
     if (info.host !== Office.HostType.Word) return;
-    const appBody = document.getElementById("app-body");
-    if (appBody) appBody.style.display = "block";
+    document.getElementById("app-body").style.display = "block";
     
     document.getElementById("searchButton").onclick = searchMatter;
 
