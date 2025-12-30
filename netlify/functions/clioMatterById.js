@@ -6,7 +6,7 @@ exports.handler = async (event) => {
 
   // This URL structure comes directly from the Stack Overflow solution
   // It forces Clio to include the 'custom_field_values' which are hidden by default
-  const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=id,display_number,client{name},custom_field_values{id,value,picklist_option{option}}`;
+  const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=id,display_number,client{name},custom_field_values{id,value,picklist_option{option}`;
 
   try {
     const resp = await fetch(url, {
