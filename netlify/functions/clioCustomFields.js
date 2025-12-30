@@ -12,7 +12,7 @@ exports.handler = async (event) => {
 
   try {
     const auth = event.headers.authorization || event.headers.Authorization;
-    const url = "https://app.clio.com/api/v4/custom_fields.json?parent_type=matter&limit=200&fields=id,name,field_type";
+    const url = "https://app.clio.com/api/v4/custom_fields.json?limit=200&fields=id,name,field_type";
 
     const resp = await fetch(url, {
       method: "GET",
