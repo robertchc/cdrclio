@@ -66,8 +66,8 @@ async function loadCustomFields(accessToken) {
   const map = Object.create(null);
   for (const cf of rows) {
     if (!cf?.id) continue;
-    const cleanId = String(cf.id).replace(/\D/g, "");
-    map[cleanId] = { name: cf.name, type: cf.field_type };
+    // Store under the raw ID (e.g., 812120556)
+    map[String(cf.id)] = { name: cf.name, type: cf.field_type };
   }
 
   customFieldsById = map;
@@ -165,44 +165,48 @@ function buildFieldBag(matter, cfMap) {
   const custom = Object.create(null);
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
-  // DIAGNOSTIC: Let's see if we have ANY data
-  if (cfvs.length > 0) {
-     console.log("Found " + cfvs.length + " custom values");
-  }
-
   cfvs.forEach(cfv => {
-    // Clio v4: The ID of the definition is usually 'custom_field_definition_id' 
-    // or inside the 'custom_field' object.
-    const defId = cfv?.custom_field?.id || cfv?.custom_field_definition_id || cfv?.id;
-    const cleanId = String(defId || "").replace(/\D/g, "");
+    // CLIO V4 SECRET: 
+    // cfv.id is the ID of the 'answer'.
+    // cfv.custom_field.id is the ID of the 'question' (the Definition).
+    // We need the 'question' ID to find the name in our map.
+    const definitionId = cfv?.custom_field?.id;
     
-    // Check our 155-item dictionary
-    const meta = cfMap ? cfMap[cleanId] : null;
-
-    if (meta && meta.name) {
-      const key = meta.name.toLowerCase().trim();
-      let val = cfv.value;
-
-      // Handle objects
-      if (val && typeof val === "object") {
-        val = val.name || val.display_name || JSON.stringify(val);
-      }
+    if (definitionId) {
+      const meta = cfMap[String(definitionId)];
       
-      custom[key] = (val !== undefined && val !== null) ? String(val).trim() : null;
+      if (meta && meta.name) {
+        const key = meta.name.toLowerCase().trim();
+        let val = cfv.value;
+
+        // Handle Picklist/Object values
+        if (val && typeof val === "object") {
+          val = val.name || val.display_name || val.option || JSON.stringify(val);
+        }
+        
+        // Fallback for Picklists if value is null
+        if ((val === null || val === undefined) && cfv.picklist_option) {
+          val = cfv.picklist_option.option || cfv.picklist_option.name;
+        }
+
+        custom[key] = (val !== null && val !== undefined) ? String(val).trim() : null;
+      }
     }
   });
 
   const getCf = (name) => {
+    if (!name) return "—";
     const found = custom[name.toLowerCase().trim()];
-    return (found && found !== "null") ? found : "—";
+    // Check if found is a string "null" or empty
+    return (found && found !== "null" && found !== "") ? found : "—";
   };
 
-  // Return the standard bag
   return {
     client_name: matter.client?.name || "—",
     matter_number: matter.display_number || "—",
     practice_area: matter.practice_area?.name || matter.practice_area || "—",
     matter_status: matter.status || "—",
+    
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
