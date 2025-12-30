@@ -251,19 +251,18 @@ function buildFieldBag(matter, cfMap) {
 
   // This will show up at the bottom of your taskpane
 if (detailsSection) {
-    // This creates a list of the 25 names Clio is actually sending
-    const foundNames = [];
-    for (const cfv of cfvs) {
+    const debugRows = cfvs.map(cfv => {
       const id = cfv?.custom_field?.id || cfv?.id;
       const meta = cfMap ? cfMap[String(id)] : null;
-      if (meta) foundNames.push(meta.name);
-    }
+      const nameInMap = meta ? meta.name : "ID NOT IN MAP";
+      return `ID: ${id} | Name: ${nameInMap}`;
+    });
 
     detailsSection.innerHTML = `
-      <div style="background:#f3f2f1; padding:8px; font-size:10px; border:1px solid #ccc; max-height: 100px; overflow-y: auto;">
+      <div style="background:#f3f2f1; padding:8px; font-size:10px; border:1px solid #ccc; max-height: 150px; overflow-y: auto; color: black;">
         <strong>Diagnostic Info:</strong><br>
-        Field Map Size: ${mapSize} | Values: ${cfvs.length}<br>
-        <strong>Names found:</strong> ${foundNames.join(", ")}
+        Map Size: ${mapSize} | Values Found: ${cfvs.length}<br><br>
+        ${debugRows.join("<br>")}
       </div>
     `;
   }
