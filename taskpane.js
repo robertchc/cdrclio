@@ -249,13 +249,14 @@ function buildFieldBag(matter, cfMap) {
   const mapSize = Object.keys(cfMap || {}).length;
   const cfvs = Array.isArray(matter?.custom_field_values) ? matter.custom_field_values : [];
 
-  // This will show up at the bottom of your taskpane
-if (detailsSection) {
+  // Update Diagnostic to show the Cleaned IDs
+  if (detailsSection) {
     const debugRows = cfvs.map(cfv => {
-      const id = cfv?.custom_field?.id || cfv?.id;
-      const meta = cfMap ? cfMap[String(id)] : null;
+      const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
+      const cleanId = rawId.split('-').pop(); // Get just the number
+      const meta = cfMap ? cfMap[cleanId] : null;
       const nameInMap = meta ? meta.name : "ID NOT IN MAP";
-      return `ID: ${id} | Name: ${nameInMap}`;
+      return `ID: ${rawId} -> Match: ${nameInMap}`;
     });
 
     detailsSection.innerHTML = `
@@ -269,17 +270,24 @@ if (detailsSection) {
 
   const custom = Object.create(null);
   for (const cfv of cfvs) {
-    const id = cfv?.custom_field?.id || cfv?.id; 
-    if (!id) continue;
+    // 1. Get raw ID and clean it (remove 'picklist-', 'date-', etc)
+    const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
+    if (!rawId) continue;
+    const cleanId = rawId.split('-').pop(); 
 
-    const meta = cfMap ? cfMap[String(id)] : null;
+    // 2. Match against map using cleaned ID
+    const meta = cfMap ? cfMap[cleanId] : null;
+    
     if (meta && meta.name) {
       const key = meta.name.toLowerCase().trim();
       let val = cfv?.value;
+      
+      // 3. Handle Picklists/Contacts vs Strings
       if (val && typeof val === "object") {
         val = val.name || val.display_name || JSON.stringify(val);
       }
-      custom[key] = val != null ? String(val).trim() : null;
+      
+      custom[key] = (val !== undefined && val !== null) ? String(val).trim() : null;
     }
   }
 
