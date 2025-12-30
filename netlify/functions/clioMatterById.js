@@ -1,13 +1,12 @@
 const fetch = require("node-fetch");
 
 exports.handler = async (event) => {
-  try {
-    const id = event.queryStringParameters.id;
-    // We add a random number to the URL (?_cb=) to force Clio to bypass its cache
-    // We also explicitly ask for the custom_field_values in the fields list 
-    // to leave Clio no choice but to send them.
-    const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=id,display_number,client{name},custom_field_values{id,value,picklist_option{option}}&_cb=${Date.now()}`;
+  const { id } = event.queryStringParameters;
+  
+  // Per Clio API v4: Single resource GET must be the absolute path
+  const url = `https://app.clio.com/api/v4/matters/${id}.json`;
 
+  try {
     const resp = await fetch(url, {
       method: "GET",
       headers: { 
@@ -16,14 +15,22 @@ exports.handler = async (event) => {
       }
     });
 
-    const data = await resp.json();
+    const json = await resp.json();
 
+    // We return the WHOLE JSON from Clio. 
+    // Clio wraps its response in { "data": { ... } }
     return {
       statusCode: 200,
-      headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json" },
-      body: JSON.stringify(data)
+      headers: { 
+        "Access-Control-Allow-Origin": "*", 
+        "Content-Type": "application/json" 
+      },
+      body: JSON.stringify(json) 
     };
   } catch (err) {
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+    return { 
+      statusCode: 500, 
+      body: JSON.stringify({ error: err.message }) 
+    };
   }
 };
