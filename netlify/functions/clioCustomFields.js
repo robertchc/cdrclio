@@ -1,3 +1,4 @@
+// REPLACE your entire clioCustomFields function with this:
 const ALLOWED_ORIGIN = "https://meek-seahorse-afd241.netlify.app";
 
 function corsHeaders() {
@@ -20,10 +21,11 @@ exports.handler = async (event) => {
       return {
         statusCode: 401,
         headers: { ...corsHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ ok: false, error: "Missing Authorization header" }),
+        body: JSON.stringify({ ok: false, error: "Missing Authorization" }),
       };
     }
 
+    // Standard Clio V4 Custom Fields endpoint
     const url = "https://app.clio.com/api/v4/custom_fields.json?parent_type=matter&limit=200&fields=id,name,field_type";
 
     const resp = await fetch(url, {
@@ -39,7 +41,8 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         ok: resp.ok,
         status: resp.status,
-        // FIX: Extract the actual data array so the taskpane sees json.data as the array
+        // SURGICAL FIX: Extract the internal data array 
+        // so taskpane.js sees 'json.data' as the actual list of fields.
         data: json?.data || [], 
         error: json?.error || null,
       }),
