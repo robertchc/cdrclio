@@ -4,133 +4,49 @@
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
   <title>CDR Clio</title>
-
   <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
   <link rel="stylesheet" href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/11.0.0/css/fabric.min.css" />
-
   <link rel="stylesheet" href="taskpane.css" type="text/css" />
 </head>
 
 <body class="ms-font-m ms-Fabric">
-  <!-- Header (borrowed vibe from Clause Picker) -->
   <header class="cdr-header ms-bgColor-neutralLighter">
-    <img
-      class="cdr-logo"
-      width="44"
-      height="44"
-      src="https://meek-seahorse-afd241.netlify.app/assets/logo-filled.png"
-      alt="CDR Law"
-      title="CDR Law"
-    />
+    <img class="cdr-logo" width="44" height="44" src="https://meek-seahorse-afd241.netlify.app/assets/logo-filled.png" alt="CDR Law" />
     <div class="cdr-header-text">
       <div class="cdr-title">CDR + Clio</div>
     </div>
   </header>
 
-  <main id="app-body" class="cdr-main" style="display:none;">
-    <!-- Search card -->
+  <main id="app-body" class="cdr-main" style="display:block;">
+    
     <section class="cdr-card">
       <div class="cdr-card-title">Clio Matter Search</div>
-      <div class="cdr-card-subtitle ms-font-s ms-fontColor-neutralSecondary">
-           </div>
-
       <div class="cdr-row">
-        <input
-          type="text"
-          id="matterNumber"
-          class="cdr-input"
-          placeholder="Matter # (e.g. 04029-24-Corrigan)"
-          autocomplete="off"
-        />
+        <input type="text" id="matterNumber" class="cdr-input" placeholder="Matter # (e.g. 04029-24)" />
         <button id="searchButton" class="cdr-btn cdr-btn-primary" type="button">
           <span class="cdr-btn-text">Search</span>
-          <span class="cdr-spinner" aria-hidden="true"></span>
         </button>
       </div>
-
-      <div id="status" class="cdr-status" role="status" aria-live="polite" style="display:none;"></div>
+      <div id="status" class="cdr-status"></div>
     </section>
 
-<!-- Fields card -->
-<section class="cdr-card">
-  <div class="cdr-card-title">Clio Data</div>
-  <div class="cdr-card-subtitle ms-font-s ms-fontColor-neutralSecondary">
-       
-  </div>
+    <section class="cdr-card">
+      <div class="cdr-card-title">Clio Data</div>
+      <div id="details-section" class="cdr-field-groups">
+          </div>
+    </section>
 
-  <div class="cdr-field-groups">
-
-    <!-- TIER 1 -->
-    <div class="cdr-group">
-      <div class="cdr-group-toggle">Court & Parties</div>
-      <div class="cdr-group-content">
-        <div class="cdr-field" data-field="client_name">Client Name</div>
-        <div class="cdr-field" data-field="adverse_party_name">Adverse Party Name</div>
-        <div class="cdr-field" data-field="case_name">Case Name (a v. b)</div>
-        <div class="cdr-field" data-field="court_file_no">Court File No. (Pleadings)</div>
-        <div class="cdr-field" data-field="court_name">Court (pleadings)</div>
-      </div>
+    <div id="debug-container" style="margin-top:20px; border-top:1px solid #ddd; padding:10px; background:#fafafa;">
+        <h3 style="font-size:11px; color:#999; text-transform:uppercase;">Raw Clio Data (Debug)</h3>
+        <pre id="debug-raw" style="font-size:10px; color:#444; white-space:pre-wrap; max-height:200px; overflow:auto;">Waiting for search...</pre>
     </div>
 
-    <!-- TIER 2 -->
-    <div class="cdr-group">
-      <div class="cdr-group-toggle">Key Dates & Orders</div>
-      <div class="cdr-group-content">
-        <div class="cdr-field" data-field="date_of_separation">Date of Separation</div>
-        <div class="cdr-field" data-field="date_of_marriage">Date of Marriage</div>
-        <div class="cdr-field" data-field="date_of_divorce">Date of Divorce</div>
-        <div class="cdr-field" data-field="date_of_most_recent_order">Date of Most Recent Order</div>
-        <div class="cdr-field" data-field="type_of_most_recent_order">Type of Most Recent Order</div>
-        <div class="cdr-field" data-field="judge_name">Judge Name</div>
-        <div class="cdr-field" data-field="your_honour">My Lord/Lady/Your Honour</div>
-      </div>
-    </div>
-
-    <!-- TIER 3 -->
-    <div class="cdr-group">
-      <div class="cdr-group-toggle">Matter & Lawyer Info</div>
-      <div class="cdr-group-content">
-        <div class="cdr-field" data-field="matter_number">Display Number</div>
-        <div class="cdr-field" data-field="practice_area">Practice Area</div>
-        <div class="cdr-field" data-field="matter_status">Status</div>
-        <div class="cdr-field" data-field="matter_stage">Matter stage</div>
-        <div class="cdr-field" data-field="responsible_attorney">Responsible Attorney</div>
-        <div class="cdr-field" data-field="originating_attorney">Originating Attorney</div>
-        <div class="cdr-field" data-field="opposing_counsel">Opposing Counsel</div>
-      </div>
-    </div>
-
-    <!-- TIER 4 -->
-    <div class="cdr-group">
-      <div class="cdr-group-toggle">Family Law Details</div>
-      <div class="cdr-group-content">
-        <div class="cdr-field" data-field="matrimonial_status">Matrimonial Status</div>
-        <div class="cdr-field" data-field="cohabitation_begin_date">Co-Habitation Begin Date</div>
-        <div class="cdr-field" data-field="common_law_begin_date">Spousal Common-Law Begin Date</div>
-        <div class="cdr-field" data-field="place_of_marriage">Place of Marriage</div>
-        <div class="cdr-field" data-field="adverse_dob">Adverse DOB</div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Optional: keep this as a simple place for status messages/results if your JS uses it -->
-  <div id="details-section" class="cdr-results" style="margin-top:12px;"></div>
-</section>
-<footer class="cdr-footer">
-  ©2025 CDR Law. Created by Robert C.H. Corrigan
-</footer>
-
+    <footer class="cdr-footer">
+      ©2025 CDR Law. Created by Robert C.H. Corrigan
+    </footer>
   </main>
 
   <script src="taskpane.js"></script>
-  <div id="debug-container" style="margin-top:20px; border-top:2px solid #ccc; padding:10px; background:#f4f4f4;">
-    <h3 style="font-size:12px; color:#666;">RAW CLIO DATA (DEBUG)</h3>
-    <pre id="debug-raw" style="font-size:10px; white-space:pre-wrap; word-wrap:break-word; max-height:300px; overflow-y:auto;">
-        Waiting for search...
-    </pre>
-</div>
 </body>
 </html>
