@@ -140,7 +140,8 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
   const match = records[0]; 
   const matterId = match?.id;
 
-  const detailFields = "id,display_number,number,status,client,practice_area,custom_field_values{id,value,picklist_option,custom_field{id}}";
+// We are adding {name} inside the custom_field brackets
+  const detailFields = "id,display_number,number,status,client,practice_area,custom_field_values{id,value,picklist_option,custom_field{id,name}}";  
   const detailUrl = `${DETAIL_FN}?id=${encodeURIComponent(matterId)}&fields=${encodeURIComponent(detailFields)}`;
 
   const detailResp = await fetch(detailUrl, {
@@ -165,16 +166,19 @@ function buildFieldBag(matter, cfMap) {
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
   cfvs.forEach(cfv => {
+    // Attempt 1: Get the name directly from the API response (if provided)
+    // Attempt 2: Look up the name in the map using the ID
     const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
     const numericId = rawId.replace(/\D/g, ""); 
     const meta = cfMap ? cfMap[numericId] : null;
     
-    const name = meta?.name || cfv?.custom_field?.name;
+    const name = cfv?.custom_field?.name || meta?.name;
 
     if (name) {
       const key = name.toLowerCase().trim();
       let val = null;
 
+      // Handle the value based on type
       if (cfv.value !== undefined && cfv.value !== null) {
         if (typeof cfv.value === 'object') {
           val = cfv.value.name || cfv.value.display_name || cfv.value.first_name || JSON.stringify(cfv.value);
@@ -202,7 +206,6 @@ function buildFieldBag(matter, cfMap) {
     matter_number: matter.display_number || "—",
     practice_area: matter.practice_area?.name || matter.practice_area || "—",
     matter_status: matter.status || "—",
-    
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
