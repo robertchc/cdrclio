@@ -174,6 +174,31 @@ async function printFullMatterResponse() {
     const dResp = await fetch(dUrl, { headers: { Authorization: `Bearer ${cachedAccessToken}` } });
     const dJson = await dResp.json();
     const matter = dJson.data;
+const dictionary = {}; // This should be populated from your clioCustomFields call
+
+let output = `MATTER: ${matter.display_number}\n`;
+output += `CLIENT: ${matter.client?.name || "Unknown"}\n`;
+output += `----------------------------------\n`;
+
+if (matter.custom_field_values && matter.custom_field_values.length > 0) {
+  matter.custom_field_values.forEach(cfv => {
+    // 1. Get the raw ID (the number after the hyphen)
+    const rawId = String(cfv.id).includes('-') ? cfv.id.split('-')[1] : cfv.id;
+    
+    // 2. Look up the human name from your dictionary
+    const fieldName = dictionary[rawId] || `Field ID: ${rawId}`;
+    
+    // 3. Get the value
+    let val = cfv.value;
+    if (!val && cfv.picklist_option) val = cfv.picklist_option.option;
+    
+    output += `${fieldName}: ${val || "—"}\n`;
+  });
+} else {
+  output += "ERROR: No custom fields returned in the JSON object.";
+}
+
+document.getElementById("debug-raw").textContent = output;
 
     // 3. Construct the "Pretty Print" Output
     let report = `MATNER: ${matter.display_number}\n`;
