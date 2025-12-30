@@ -9,34 +9,23 @@ function corsHeaders() {
   };
 }
 
+// Netlify Function: clioMatterById.js
 exports.handler = async (event) => {
-  try {
-    if (event.httpMethod === "OPTIONS") {
-      return { statusCode: 204, headers: corsHeaders(), body: "" };
+  const { id, fields } = event.queryStringParameters;
+  
+  // This is the critical part: 
+  // We must forward the 'fields' string exactly as the Taskpane sent it.
+  const clioUrl = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
+
+  const response = await fetch(clioUrl, {
+    headers: {
+      Authorization: event.headers.authorization,
+      "Content-Type": "application/json"
     }
-
-    const auth = event.headers.authorization || event.headers.Authorization;
-    const id = event.queryStringParameters?.id;
-
-    if (!id || !auth) {
-      return { statusCode: 400, headers: corsHeaders(), body: "Missing ID or Auth" };
-    }
-
-    // REVERTED: Using the flat string that worked before. 
-    // No nested braces {} which Clio might have been rejecting.
-// We add the parentheses to tell Clio exactly which sub-fields we want inside the values
-// Pre-encoded version of: id,display_number,status,client,practice_area,custom_field_values{id,value,custom_field{id,name}}
-// We are stripping it back to the most stable, flat structure Clio v4 supports
-const fields = "id,display_number,status,client,practice_area,custom_field_values";
-const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
-
-    const resp = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Authorization": auth,
-        "Accept": "application/json",
-      },
-    });
+  });
+  
+  // ... rest of your return logic
+}
 
     const text = await resp.text();
     const contentType = resp.headers.get("content-type") || "application/json";
