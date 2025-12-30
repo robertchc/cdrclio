@@ -15,67 +15,40 @@ exports.handler = async (event) => {
       return { statusCode: 204, headers: corsHeaders(), body: "" };
     }
 
-    if (event.httpMethod !== "GET") {
-      return {
-        statusCode: 405,
-        headers: { ...corsHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ ok: false, status: 405, error: "Method Not Allowed" }),
-      };
-    }
-
     const auth = event.headers.authorization || event.headers.Authorization;
     if (!auth || !auth.startsWith("Bearer ")) {
       return {
         statusCode: 401,
         headers: { ...corsHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ ok: false, status: 401, error: "Missing or invalid Authorization header" }),
+        body: JSON.stringify({ ok: false, error: "Missing Authorization header" }),
       };
     }
 
-    const url =
-      "https://app.clio.com/api/v4/custom_fields.json" +
-      "?parent_type=matter" +
-      "&limit=200" +
-      "&fields=" +
-      encodeURIComponent("id,name,field_type");
+    const url = "https://app.clio.com/api/v4/custom_fields.json?parent_type=matter&limit=200&fields=id,name,field_type";
 
     const resp = await fetch(url, {
       method: "GET",
       headers: { Authorization: auth, Accept: "application/json" },
     });
 
-    const text = await resp.text();
+    const json = await resp.json();
 
-    // Try to parse JSON; if it fails, keep raw text.
-    let parsed = null;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = null;
-    }
-
-    // Always return JSON to the client (so your taskpane can display it)
     return {
       statusCode: 200,
       headers: { ...corsHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({
         ok: resp.ok,
         status: resp.status,
-        clio_content_type: resp.headers.get("content-type") || null,
-        preview: text.slice(0, 800),
-        data: parsed?.data || null,
-        error: parsed?.error || null,
+        // FIX: Extract the actual data array so the taskpane sees json.data as the array
+        data: json?.data || [], 
+        error: json?.error || null,
       }),
     };
   } catch (e) {
     return {
-      statusCode: 200,
+      statusCode: 500,
       headers: { ...corsHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ok: false,
-        status: 500,
-        error: String(e),
-      }),
+      body: JSON.stringify({ ok: false, error: String(e) }),
     };
   }
 };
