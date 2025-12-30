@@ -60,20 +60,14 @@ async function loadCustomFields(accessToken) {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
 
-  if (!resp.ok) throw new Error(`Custom fields lookup failed (${resp.status})`);
-
   const json = await resp.json();
-  const rows = Array.isArray(json?.data) ? json.data : [];
+  const rows = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : []);
 
   const map = Object.create(null);
   for (const cf of rows) {
-    if (cf?.id == null) continue;
-    // Store IDs as clean numeric strings
+    if (!cf?.id) continue;
     const cleanId = String(cf.id).replace(/\D/g, "");
-    map[cleanId] = {
-      name: cf?.name ? String(cf.name).trim() : null,
-      field_type: cf?.field_type || null,
-    };
+    map[cleanId] = { name: cf.name, type: cf.field_type };
   }
 
   customFieldsById = map;
@@ -101,7 +95,7 @@ async function searchMatter() {
     try {
       customFieldsById = await loadCustomFields(cachedAccessToken);
     } catch (cfError) {
-      console.warn("Field definitions failed, using fallback.", cfError);
+      console.warn("Field definitions failed.", cfError);
       customFieldsById = {};
     }
 
@@ -159,7 +153,6 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
 
   if (!matterData) return null;
 
-  // CALL THE BUILDER AND RETURN THE FINAL OBJECT
   return buildFieldBag(matterData, cfMap);
 }
 
@@ -172,25 +165,18 @@ function buildFieldBag(matter, cfMap) {
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
   cfvs.forEach(cfv => {
-    // 1. Get the ID using every possible Clio path
-    const rawId = String(
-      cfv?.custom_field?.id || 
-      cfv?.custom_field_definition_id || 
-      cfv?.id || 
-      ""
-    );
-    
+    const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
     const numericId = rawId.replace(/\D/g, ""); 
     const meta = cfMap ? cfMap[numericId] : null;
+    
+    const name = meta?.name || cfv?.custom_field?.name;
 
-    if (meta && meta.name) {
-      const key = meta.name.toLowerCase().trim();
-      
-      // 2. Extract Value - Handle picklists, strings, and numbers
+    if (name) {
+      const key = name.toLowerCase().trim();
       let val = null;
+
       if (cfv.value !== undefined && cfv.value !== null) {
         if (typeof cfv.value === 'object') {
-          // Check for common Clio object properties
           val = cfv.value.name || cfv.value.display_name || cfv.value.first_name || JSON.stringify(cfv.value);
         } else {
           val = cfv.value;
