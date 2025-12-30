@@ -146,7 +146,63 @@ function renderFields() {
     else el.classList.remove("cdr-field-empty");
   });
 }
+async function printFullMatterResponse() {
+  try {
+    if (!cachedAccessToken) cachedAccessToken = await authenticateClio();
+    
+    // 1. Get the Dictionary from your clioCustomFields function
+    const cfResp = await fetch(CUSTOM_FIELDS_FN, {
+      headers: { Authorization: `Bearer ${cachedAccessToken}` }
+    });
+    const cfJson = await cfResp.json();
+    
+    // Build a quick-lookup object: { "12345": "Case Name (a v. b)" }
+    const dictionary = {};
+    cfJson.data.forEach(field => {
+      dictionary[String(field.id)] = field.name;
+    });
 
+    // 2. Get the Matter Data
+    const matterNumber = document.getElementById("matterNumber").value.trim();
+    const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}`;
+    const lResp = await fetch(listUrl, { headers: { Authorization: `Bearer ${cachedAccessToken}` } });
+    const lJson = await lResp.json();
+    const matterId = lJson.data[0].id;
+
+    // Fetch the specific matter details
+    const dUrl = `${DETAIL_FN}?id=${matterId}`;
+    const dResp = await fetch(dUrl, { headers: { Authorization: `Bearer ${cachedAccessToken}` } });
+    const dJson = await dResp.json();
+    const matter = dJson.data;
+
+    // 3. Construct the "Pretty Print" Output
+    let report = `MATNER: ${matter.display_number}\n`;
+    report += `CLIENT: ${matter.client?.name || "N/A"}\n`;
+    report += `------------------------------------------\n`;
+
+    if (matter.custom_field_values) {
+      matter.custom_field_values.forEach(cfv => {
+        // Strip prefixes like "text_line-" or "picklist-" to get the raw ID
+        const rawId = String(cfv.id).split('-')[1] || cfv.id;
+        
+        // Look up the name in our dictionary
+        const friendlyName = dictionary[rawId] || `Unknown Field (ID: ${rawId})`;
+        
+        // Handle values (text vs picklist)
+        let val = cfv.value;
+        if (!val && cfv.picklist_option) val = cfv.picklist_option.option;
+        
+        report += `${friendlyName}: ${val || "—"}\n`;
+      });
+    }
+
+    // 4. Dump everything to the debug box
+    document.getElementById("debug-raw").textContent = report;
+
+  } catch (err) {
+    document.getElementById("debug-raw").textContent = "Mapping Error: " + err.message;
+  }
+}
 function authenticateClio() {
   return new Promise((resolve, reject) => {
     Office.context.ui.displayDialogAsync(DIALOG_START_URL, { height: 60, width: 40 }, (result) => {
