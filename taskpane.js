@@ -239,42 +239,46 @@ const matterData = detailJson?.data;
 if (!matterData) return null;
 
 // Use the cfMap we passed in
-return buildFieldBag(matterData, cfMap);
-}
-
 function buildFieldBag(matter, cfMap) {
   if (!matter) return null;
 
   const custom = Object.create(null);
   const cfvs = Array.isArray(matter?.custom_field_values) ? matter.custom_field_values : [];
+  let foundSample = [];
 
   for (const cfv of cfvs) {
-    // 1. Get the raw ID (e.g., "picklist-812120556")
+    // 1. Try to get the name from the Map using the ID
     const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
-    if (!rawId) continue;
-
-    // 2. STRIP THE PREFIX: turns "picklist-812120556" into "812120556"
     const numericId = rawId.replace(/\D/g, ""); 
-
-    // 3. Look up in your map
     const meta = cfMap ? cfMap[numericId] : null;
     
-    if (meta && meta.name) {
-      const key = meta.name.toLowerCase().trim();
+    // 2. Fallback: If map fails, check if the name is tucked inside the value object
+    const name = meta?.name || cfv?.custom_field?.name || cfv?.name;
+
+    if (name) {
+      const key = String(name).toLowerCase().trim();
       let val = cfv?.value;
       
-      // Handle objects (Picklists/Contacts) vs raw strings
       if (val && typeof val === "object") {
         val = val.name || val.display_name || val.first_name || JSON.stringify(val);
       }
       
       custom[key] = (val !== undefined && val !== null) ? String(val).trim() : null;
+      
+      if (foundSample.length < 3) foundSample.push(`${key}: ${val}`);
     }
+  }
+
+  // Diagnostic: Update the status section to show what we actually mapped
+  const detailsSection = document.getElementById("details-section");
+  if (detailsSection && foundSample.length > 0) {
+    detailsSection.innerHTML = `<div style="color:blue; font-size:10px;">Mapped: ${foundSample.join(" | ")}</div>`;
   }
 
   const getCf = (name) => {
     if (!name) return "—";
-    return custom[name.toLowerCase().trim()] || "—";
+    const val = custom[name.toLowerCase().trim()];
+    return (val && val !== "null") ? val : "—";
   };
 
   return {
@@ -283,7 +287,6 @@ function buildFieldBag(matter, cfMap) {
     practice_area: (matter?.practice_area?.name || matter?.practice_area || "—"),
     matter_status: matter?.status || "—",
     
-    // These names must match your Clio Custom Field names exactly (case-insensitive)
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
