@@ -85,7 +85,7 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
   const detailFields = "id,display_number,status,client,practice_area,custom_field_values";
   
   // Build the URL without extra braces that might break during transmission
-// SIMPLIFIED: Let the Netlify function handle the field strings
+// Keep it simple. Netlify does the rest.
   const detailUrl = `${DETAIL_FN}?id=${matterId}`;
 
   const detailResp = await fetch(detailUrl, {
