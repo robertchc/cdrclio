@@ -1,31 +1,17 @@
-// REPLACE your entire clioCustomFields function with this:
 const ALLOWED_ORIGIN = "https://meek-seahorse-afd241.netlify.app";
 
-function corsHeaders() {
-  return {
+exports.handler = async (event) => {
+  const headers = {
     "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
     "Access-Control-Allow-Methods": "GET,OPTIONS",
     "Access-Control-Allow-Headers": "Authorization,Content-Type,Accept",
-    "Vary": "Origin",
+    "Content-Type": "application/json"
   };
-}
 
-exports.handler = async (event) => {
+  if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers, body: "" };
+
   try {
-    if (event.httpMethod === "OPTIONS") {
-      return { statusCode: 204, headers: corsHeaders(), body: "" };
-    }
-
     const auth = event.headers.authorization || event.headers.Authorization;
-    if (!auth || !auth.startsWith("Bearer ")) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ ok: false, error: "Missing Authorization" }),
-      };
-    }
-
-    // Standard Clio V4 Custom Fields endpoint
     const url = "https://app.clio.com/api/v4/custom_fields.json?parent_type=matter&limit=200&fields=id,name,field_type";
 
     const resp = await fetch(url, {
@@ -37,21 +23,14 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: { ...corsHeaders(), "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         ok: resp.ok,
-        status: resp.status,
-        // SURGICAL FIX: Extract the internal data array 
-        // so taskpane.js sees 'json.data' as the actual list of fields.
-        data: json?.data || [], 
-        error: json?.error || null,
+        // SURGICAL FIX: Flatten the data array here
+        data: json?.data || []
       }),
     };
   } catch (e) {
-    return {
-      statusCode: 500,
-      headers: { ...corsHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ ok: false, error: String(e) }),
-    };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: String(e) }) };
   }
 };
