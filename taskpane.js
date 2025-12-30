@@ -250,12 +250,20 @@ function buildFieldBag(matter, cfMap) {
   const cfvs = Array.isArray(matter?.custom_field_values) ? matter.custom_field_values : [];
 
   // This will show up at the bottom of your taskpane
-  if (detailsSection) {
+if (detailsSection) {
+    // This creates a list of the 25 names Clio is actually sending
+    const foundNames = [];
+    for (const cfv of cfvs) {
+      const id = cfv?.custom_field?.id || cfv?.id;
+      const meta = cfMap ? cfMap[String(id)] : null;
+      if (meta) foundNames.push(meta.name);
+    }
+
     detailsSection.innerHTML = `
-      <div style="background:#f3f2f1; padding:8px; font-size:10px; border:1px solid #ccc;">
+      <div style="background:#f3f2f1; padding:8px; font-size:10px; border:1px solid #ccc; max-height: 100px; overflow-y: auto;">
         <strong>Diagnostic Info:</strong><br>
-        Field Map Size: ${mapSize}<br>
-        Values found on Matter: ${cfvs.length}
+        Field Map Size: ${mapSize} | Values: ${cfvs.length}<br>
+        <strong>Names found:</strong> ${foundNames.join(", ")}
       </div>
     `;
   }
