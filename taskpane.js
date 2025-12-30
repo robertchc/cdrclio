@@ -93,6 +93,10 @@ async function searchMatter() {
 
     showMessage("Loading custom fields...");
     const cfMap = await loadCustomFields(cachedAccessToken);
+    
+    // DIAGNOSTIC ALERT
+    const mapSize = Object.keys(cfMap || {}).length;
+    alert("Field Definitions Found: " + mapSize);
 
     showMessage("Searching Clio...");
     const fieldBag = await fetchMatterFieldBagByMatterNumber(cachedAccessToken, matterNumber, cfMap);
@@ -108,6 +112,7 @@ async function searchMatter() {
     renderFields();
     clearMessage();
   } catch (error) {
+    alert("CRITICAL ERROR: " + error.message);
     console.error("Search failed:", error);
     showMessage("Search failed (see console).");
   }
