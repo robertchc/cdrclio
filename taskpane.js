@@ -125,7 +125,7 @@ async function searchMatter() {
 }
 
 async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMap) {
-  const listFields = "id,display_number,client{name,first_name,last_name},status,practice_area{name}";
+  const listFields = "id,display_number";
   const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}&fields=${encodeURIComponent(listFields)}`;
 
   const listResp = await fetch(listUrl, {
@@ -134,14 +134,14 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
   });
 
   const listJson = await listResp.json();
-  const records = Array.isArray(listJson?.data) ? listJson.data : [];
+  const records = listJson?.data || [];
   if (!records.length) return null;
 
   const match = records[0]; 
   const matterId = match?.id;
 
-// We are adding {name} inside the custom_field brackets
-  const detailFields = "id,display_number,number,status,client,practice_area,custom_field_values{id,value,picklist_option,custom_field{id,name}}";  
+  // We are using the "Brute Force" fields string to see everything
+  const detailFields = "id,display_number,status,client{name},practice_area{name},custom_field_values{id,value,picklist_option,custom_field{id,name}}";
   const detailUrl = `${DETAIL_FN}?id=${encodeURIComponent(matterId)}&fields=${encodeURIComponent(detailFields)}`;
 
   const detailResp = await fetch(detailUrl, {
@@ -150,12 +150,19 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
   });
 
   const detailJson = await detailResp.json();
-  const matterData = detailJson?.data;
+  
+  // --- DEBUG PRINTING START ---
+  const debugEl = document.getElementById("debug-raw");
+  if (debugEl) {
+    debugEl.textContent = JSON.stringify(detailJson, null, 2);
+  }
+  console.log("Full Detail JSON:", detailJson);
+  // --- DEBUG PRINTING END ---
 
+  const matterData = detailJson?.data;
   if (!matterData) return null;
 
   return buildFieldBag(matterData, cfMap);
-}
 
 // --- LOGIC FUNCTIONS ---
 
@@ -166,39 +173,35 @@ function buildFieldBag(matter, cfMap) {
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
   cfvs.forEach(cfv => {
-    // CLIO V4 SECRET: 
-    // cfv.id is the ID of the 'answer'.
-    // cfv.custom_field.id is the ID of the 'question' (the Definition).
-    // We need the 'question' ID to find the name in our map.
-    const definitionId = cfv?.custom_field?.id;
+    // Look for name in three places: Map by definition ID, Map by instance ID, or direct from API
+    const defId = String(cfv?.custom_field?.id || "");
+    const instanceId = String(cfv?.id || "");
+    const meta = cfMap ? (cfMap[defId] || cfMap[instanceId]) : null;
     
-    if (definitionId) {
-      const meta = cfMap[String(definitionId)];
-      
-      if (meta && meta.name) {
-        const key = meta.name.toLowerCase().trim();
-        let val = cfv.value;
+    const name = meta?.name || cfv?.custom_field?.name;
 
-        // Handle Picklist/Object values
-        if (val && typeof val === "object") {
-          val = val.name || val.display_name || val.option || JSON.stringify(val);
-        }
-        
-        // Fallback for Picklists if value is null
-        if ((val === null || val === undefined) && cfv.picklist_option) {
-          val = cfv.picklist_option.option || cfv.picklist_option.name;
-        }
+    if (name) {
+      const key = name.toLowerCase().trim();
+      let val = cfv.value;
 
-        custom[key] = (val !== null && val !== undefined) ? String(val).trim() : null;
+      // Unpack picklists or objects
+      if (val && typeof val === "object") {
+        val = val.name || val.display_name || val.option || JSON.stringify(val);
+      }
+      if ((val === null || val === undefined) && cfv.picklist_option) {
+        val = cfv.picklist_option.option || cfv.picklist_option.name;
+      }
+
+      if (val !== null && val !== undefined) {
+        custom[key] = String(val).trim();
       }
     }
   });
 
+  // Simplified getter for the Bag
   const getCf = (name) => {
-    if (!name) return "—";
-    const found = custom[name.toLowerCase().trim()];
-    // Check if found is a string "null" or empty
-    return (found && found !== "null" && found !== "") ? found : "—";
+    const s = name.toLowerCase().trim();
+    return custom[s] || "—";
   };
 
   return {
@@ -206,27 +209,12 @@ function buildFieldBag(matter, cfMap) {
     matter_number: matter.display_number || "—",
     practice_area: matter.practice_area?.name || matter.practice_area || "—",
     matter_status: matter.status || "—",
-    
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
     court_name: getCf("Court (pleadings)"),
-    date_of_separation: getCf("Date of Separation"),
-    date_of_marriage: getCf("Date of Marriage"),
-    date_of_divorce: getCf("Date of Divorce"),
-    date_of_most_recent_order: getCf("Date of Most Recent Order"),
-    type_of_most_recent_order: getCf("Type of Most Recent Order"),
-    judge_name: getCf("Judge Name ie. Justice Jim Doe"),
-    your_honour: getCf("My Lord/Lady/Your Honour"),
-    matter_stage: getCf("Matter stage"),
-    responsible_attorney: getCf("Responsible Attorney"),
-    originating_attorney: getCf("Originating Attorney"),
-    opposing_counsel: getCf("Opposing Counsel"),
-    matrimonial_status: getCf("Matrimonial Status"),
-    cohabitation_begin_date: getCf("Co-Habitation Begin Date"),
-    common_law_begin_date: getCf("Spousal Common-Law Begin Date"),
-    place_of_marriage: getCf("Place of Marriage"),
-    adverse_dob: getCf("Adverse DOB")
+    judge_name: getCf("Judge Name ie. Justice Jim Doe")
+    // ... add others as needed for the test
   };
 }
 
