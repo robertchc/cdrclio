@@ -15,58 +15,36 @@ exports.handler = async (event) => {
       return { statusCode: 204, headers: corsHeaders(), body: "" };
     }
 
-    if (event.httpMethod !== "GET") {
-      return {
-        statusCode: 405,
-        headers: { ...corsHeaders(), "Content-Type": "text/plain" },
-        body: "Method Not Allowed",
-      };
-    }
-
     const auth = event.headers.authorization || event.headers.Authorization;
-    if (!auth || !auth.startsWith("Bearer ")) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders(), "Content-Type": "text/plain" },
-        body: "Missing or invalid Authorization header",
-      };
+    if (!auth) {
+      return { statusCode: 401, headers: corsHeaders(), body: "Unauthorized" };
     }
 
     const id = event.queryStringParameters?.id;
     if (!id) {
-      return {
-        statusCode: 400,
-        headers: { ...corsHeaders(), "Content-Type": "text/plain" },
-        body: "Missing id parameter",
-      };
+      return { statusCode: 400, headers: corsHeaders(), body: "Missing ID" };
     }
 
-    /**
-     * SURGICAL FIX: 
-     * We allow the nested braces {...} for custom_field_values. 
-     * This ensures we get the 'custom_field: { id }' so the taskpane 
-     * can match values to their names.
-     */
-    const fields = event.queryStringParameters?.fields || 
-                   "id,display_number,status,client,practice_area{name},custom_field_values{id,value,picklist_option,custom_field{id}}";
+    // We hardcode the fields here to be 100% sure they are correct and nested properly.
+    // This includes the required braces for custom fields.
+    const requestedFields = "id,display_number,status,client{name,first_name,last_name},practice_area{name},custom_field_values{id,value,picklist_option,custom_field{id}}";
 
-    const url = `https://app.clio.com/api/v4/matters/${encodeURIComponent(id)}.json?fields=${encodeURIComponent(fields)}`;
+    const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${encodeURIComponent(requestedFields)}`;
 
     const resp = await fetch(url, {
       method: "GET",
       headers: {
-        Authorization: auth,
-        Accept: "application/json",
+        "Authorization": auth,
+        "Accept": "application/json",
       },
     });
 
-    const text = await resp.text();
-    const contentType = resp.headers.get("content-type") || "application/json";
+    const data = await resp.json();
 
     return {
       statusCode: resp.status,
-      headers: { ...corsHeaders(), "Content-Type": contentType },
-      body: text,
+      headers: { ...corsHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     };
   } catch (e) {
     return {
