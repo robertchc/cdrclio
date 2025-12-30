@@ -245,20 +245,23 @@ return buildFieldBag(matterData, cfMap);
 function buildFieldBag(matter, cfMap) {
   if (!matter) return null;
 
-  // DIAGNOSTIC 1: Check if the Field Map actually exists
+  const detailsSection = document.getElementById("details-section");
   const mapSize = Object.keys(cfMap || {}).length;
-  alert("Diagnostic: Map size is " + mapSize);
-
-  const custom = Object.create(null);
   const cfvs = Array.isArray(matter?.custom_field_values) ? matter.custom_field_values : [];
 
-  // DIAGNOSTIC 2: Check if the matter actually has custom values
-  if (cfvs.length === 0) {
-    alert("Diagnostic: Matter has 0 custom field values.");
+  // This will show up at the bottom of your taskpane
+  if (detailsSection) {
+    detailsSection.innerHTML = `
+      <div style="background:#f3f2f1; padding:8px; font-size:10px; border:1px solid #ccc;">
+        <strong>Diagnostic Info:</strong><br>
+        Field Map Size: ${mapSize}<br>
+        Values found on Matter: ${cfvs.length}
+      </div>
+    `;
   }
 
+  const custom = Object.create(null);
   for (const cfv of cfvs) {
-    // Check both possible ID locations
     const id = cfv?.custom_field?.id || cfv?.id; 
     if (!id) continue;
 
@@ -275,8 +278,7 @@ function buildFieldBag(matter, cfMap) {
 
   const getCf = (name) => {
     if (!name) return null;
-    const val = custom[name.toLowerCase().trim()];
-    return val || null;
+    return custom[name.toLowerCase().trim()] || null;
   };
 
   return {
@@ -284,7 +286,6 @@ function buildFieldBag(matter, cfMap) {
     matter_number: matter?.display_number || "—",
     practice_area: (matter?.practice_area?.name || matter?.practice_area || "—"),
     matter_status: matter?.status || "—",
-    
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
