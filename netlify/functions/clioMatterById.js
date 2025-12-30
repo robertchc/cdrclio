@@ -3,7 +3,8 @@ const fetch = require("node-fetch");
 exports.handler = async (event) => {
   const { id } = event.queryStringParameters;
   
-  // Per Clio API v4: Single resource GET must be the absolute path
+  // WRONG: matters.json?id=123 (Returns minimal view)
+  // RIGHT: matters/123.json (Returns full view with custom fields)
   const url = `https://app.clio.com/api/v4/matters/${id}.json`;
 
   try {
@@ -17,8 +18,6 @@ exports.handler = async (event) => {
 
     const json = await resp.json();
 
-    // We return the WHOLE JSON from Clio. 
-    // Clio wraps its response in { "data": { ... } }
     return {
       statusCode: 200,
       headers: { 
@@ -28,9 +27,6 @@ exports.handler = async (event) => {
       body: JSON.stringify(json) 
     };
   } catch (err) {
-    return { 
-      statusCode: 500, 
-      body: JSON.stringify({ error: err.message }) 
-    };
+    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
