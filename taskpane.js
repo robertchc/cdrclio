@@ -18,36 +18,34 @@ let customFieldsById = null;
 Office.onReady((info) => {
   if (info.host !== Office.HostType.Word) return;
 
-  const appBody = document.getElementById("app-body");
-  if (appBody) appBody.style.display = "block";
+  try {
+    const appBody = document.getElementById("app-body");
+    if (appBody) appBody.style.display = "block";
 
-  const btn = document.getElementById("searchButton");
-  if (btn) btn.onclick = searchMatter;
+    // Re-binding carefully
+    const btn = document.getElementById("searchButton");
+    if (btn) {
+      btn.onclick = () => {
+        // We call it as a function inside the arrow to avoid hoisting issues
+        searchMatter(); 
+      };
+    }
 
-  document.querySelectorAll(".cdr-group-toggle").forEach((toggle) => {
-    toggle.addEventListener("click", () => {
-      toggle.classList.toggle("expanded");
-      const content = toggle.nextElementSibling;
-      if (content) content.classList.toggle("expanded");
+    document.querySelectorAll(".cdr-group-toggle").forEach((toggle) => {
+      toggle.onclick = () => {
+        toggle.classList.toggle("expanded");
+        const content = toggle.nextElementSibling;
+        if (content) content.classList.toggle("expanded");
+      };
     });
-  });
-
-  document.querySelectorAll(".cdr-field").forEach((el) => {
-    el.addEventListener("click", () => {
-      const key = el.getAttribute("data-field");
-      if (!key) return;
-
-      const value = currentMatter?.[key];
-      if (value == null || String(value).trim() === "" || String(value).trim() === "—") {
-        showMessage("No value available for that field on this matter.");
-        return;
-      }
-
-      insertTextAtCursor(String(value));
-    });
-  });
-
-  renderFields();
+    
+    console.log("UI Initialized successfully");
+  } catch (err) {
+    // If it fails, we force the body to show so we can see the error in our debug box
+    document.getElementById("app-body").style.display = "block";
+    const debugEl = document.getElementById("debug-raw");
+    if (debugEl) debugEl.textContent = "Initialization Error: " + err.message;
+  }
 });
 
 // --- DATA LOADING FUNCTIONS ---
