@@ -75,6 +75,7 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
   if (!records.length) return null;
 
   const matterId = records[0]?.id;
+  // We remove the ?fields= to get the FULL object so Clio doesn't hide values
   const detailUrl = `${DETAIL_FN}?id=${matterId}`;
 
   const detailResp = await fetch(detailUrl, {
@@ -94,11 +95,12 @@ function buildFieldBag(matter, cfMap) {
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
   cfvs.forEach(cfv => {
-    // This is the logic that handles the ID prefix and the Map
+    // Extract ID from strings like "text_line-3528784941"
     const rawId = String(cfv.id || "");
     const cleanId = rawId.includes("-") ? rawId.split("-")[1] : rawId;
+    
     const meta = cfMap ? cfMap[cleanId] : null;
-    const name = meta?.name || cfv.custom_field?.name;
+    const name = meta?.name;
 
     if (name) {
       const key = name.toLowerCase().trim();
@@ -126,7 +128,7 @@ function buildFieldBag(matter, cfMap) {
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
     court_name: getCf("Court (pleadings)"),
-    judge_name: getCf("Judge Name")
+    judge_name: getCf("Judge Name ie. Justice Jim Doe")
   };
 }
 
@@ -181,9 +183,20 @@ function clearMessage() {
   if (msg) msg.remove();
 }
 
+// --- BOOTSTRAP (Toggles restored here) ---
 Office.onReady((info) => {
   if (info.host !== Office.HostType.Word) return;
   const appBody = document.getElementById("app-body");
   if (appBody) appBody.style.display = "block";
+  
   document.getElementById("searchButton").onclick = searchMatter;
+
+  // Restore toggle functionality
+  document.querySelectorAll(".cdr-group-toggle").forEach((toggle) => {
+    toggle.onclick = () => {
+      toggle.classList.toggle("expanded");
+      const content = toggle.nextElementSibling;
+      if (content) content.classList.toggle("expanded");
+    };
+  });
 });
