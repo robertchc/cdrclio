@@ -1,45 +1,39 @@
-const ALLOWED_ORIGIN = "https://meek-seahorse-afd241.netlify.app";
+const fetch = require("node-fetch"); // Ensure node-fetch is in your package.json
 
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-    "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization,Content-Type,Accept",
-    "Vary": "Origin",
-  };
-}
-
-// Netlify Function: clioMatterById.js
-exports.handler = async (event) => {
-  const { id, fields } = event.queryStringParameters;
-  
-  // This is the critical part: 
-  // We must forward the 'fields' string exactly as the Taskpane sent it.
-  const clioUrl = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
-
-  const response = await fetch(clioUrl, {
-    headers: {
-      Authorization: event.headers.authorization,
-      "Content-Type": "application/json"
+exports.handler = async (event, context) => {
+  try {
+    const { id, fields } = event.queryStringParameters;
+    
+    if (!id) {
+      return { statusCode: 400, body: JSON.stringify({ error: "Matter ID is required" }) };
     }
-  });
-  
-  // ... rest of your return logic
-}
 
-    const text = await resp.text();
-    const contentType = resp.headers.get("content-type") || "application/json";
+    // We take the long fields string from the Taskpane and pass it to Clio
+    const clioUrl = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
+
+    const response = await fetch(clioUrl, {
+      method: "GET",
+      headers: {
+        "Authorization": event.headers.authorization,
+        "Accept": "application/json"
+      }
+    });
+
+    const data = await response.json();
 
     return {
-      statusCode: resp.status,
-      headers: { ...corsHeaders(), "Content-Type": contentType },
-      body: text,
+      statusCode: response.status,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(data)
     };
-  } catch (e) {
+  } catch (error) {
     return {
       statusCode: 500,
-      headers: { ...corsHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ error: String(e) }),
+      body: JSON.stringify({ error: error.message })
     };
   }
 };
