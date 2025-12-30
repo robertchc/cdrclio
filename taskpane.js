@@ -243,50 +243,50 @@ function buildFieldBag(matter, cfMap) {
   if (!matter) return null;
 
   const custom = Object.create(null);
-  const cfvs = Array.isArray(matter?.custom_field_values) ? matter.custom_field_values : [];
-  let foundSample = [];
+  
+  // Ensure we have an array to work with
+  const cfvs = (matter && matter.custom_field_values && Array.isArray(matter.custom_field_values)) 
+               ? matter.custom_field_values 
+               : [];
 
-  for (const cfv of cfvs) {
-    // 1. Try to get the name from the Map using the ID
+  // Loop through the 25 values Clio sent
+  cfvs.forEach(cfv => {
+    // 1. Extract the ID and strip letters (e.g., "date-668809896" -> "668809896")
     const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
     const numericId = rawId.replace(/\D/g, ""); 
+
+    // 2. Find the name in the 155-field map
     const meta = cfMap ? cfMap[numericId] : null;
-    
-    // 2. Fallback: If map fails, check if the name is tucked inside the value object
-    const name = meta?.name || cfv?.custom_field?.name || cfv?.name;
+    const name = meta ? meta.name : null;
 
     if (name) {
-      const key = String(name).toLowerCase().trim();
-      let val = cfv?.value;
-      
+      const key = name.toLowerCase().trim();
+      let val = cfv.value;
+
+      // 3. Handle picklists/contacts (objects) vs text (strings)
       if (val && typeof val === "object") {
         val = val.name || val.display_name || val.first_name || JSON.stringify(val);
       }
       
       custom[key] = (val !== undefined && val !== null) ? String(val).trim() : null;
-      
-      if (foundSample.length < 3) foundSample.push(`${key}: ${val}`);
     }
-  }
+  });
 
-  // Diagnostic: Update the status section to show what we actually mapped
-  const detailsSection = document.getElementById("details-section");
-  if (detailsSection && foundSample.length > 0) {
-    detailsSection.innerHTML = `<div style="color:blue; font-size:10px;">Mapped: ${foundSample.join(" | ")}</div>`;
-  }
-
+  // Helper to fetch values by name
   const getCf = (name) => {
     if (!name) return "—";
-    const val = custom[name.toLowerCase().trim()];
-    return (val && val !== "null") ? val : "—";
+    const found = custom[name.toLowerCase().trim()];
+    return (found && found !== "null") ? found : "—";
   };
 
+  // Return the data object for the UI
   return {
-    client_name: matter?.client?.name || "—",
-    matter_number: matter?.display_number || "—",
-    practice_area: (matter?.practice_area?.name || matter?.practice_area || "—"),
-    matter_status: matter?.status || "—",
+    client_name: (matter.client && matter.client.name) ? matter.client.name : "—",
+    matter_number: matter.display_number || "—",
+    practice_area: (matter.practice_area && matter.practice_area.name) ? matter.practice_area.name : (matter.practice_area || "—"),
+    matter_status: matter.status || "—",
     
+    // Field names must match exactly what you see in Clio Manage
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
