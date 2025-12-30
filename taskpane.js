@@ -9,10 +9,12 @@ const DIALOG_START_URL = `${BASE_URL}/auth-start.html`;
 
 // Netlify functions
 const LIST_FN = `${BASE_URL}/.netlify/functions/clioMatters`;       // list search
-const DETAIL_FN = `${BASE_URL}/.netlify/functions/clioMatterById`;  // single matter by id (you must create this)
+const DETAIL_FN = `${BASE_URL}/.netlify/functions/clioMatterById`;  // single matter by id
+const CUSTOM_FIELDS_FN = `${BASE_URL}/.netlify/functions/clioCustomFields`; // list custom fields (id->name)
 
 let cachedAccessToken = null;
 let currentMatter = null;
+let customFieldsById = null;
 
 Office.onReady((info) => {
   if (info.host !== Office.HostType.Word) return;
@@ -52,6 +54,35 @@ Office.onReady((info) => {
   renderFields();
 });
 
+async function loadCustomFields(accessToken) {
+  if (customFieldsById) return customFieldsById;
+
+  const resp = await fetch(CUSTOM_FIELDS_FN, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(`Custom fields lookup failed (${resp.status}). ${text}`);
+  }
+
+  const json = await resp.json();
+  const rows = Array.isArray(json?.data) ? json.data : [];
+
+  const map = Object.create(null);
+  for (const cf of rows) {
+    if (cf?.id == null) continue;
+    map[String(cf.id)] = {
+      name: cf?.name ? String(cf.name).trim() : null,
+      field_type: cf?.field_type ? String(cf.field_type).trim() : null,
+    };
+  }
+
+  customFieldsById = map;
+  return map;
+}
+
 async function searchMatter() {
   const input = document.getElementById("matterNumber");
   const matterNumber = (input?.value || "").trim();
@@ -68,9 +99,11 @@ async function searchMatter() {
       console.log("Access Token:", cachedAccessToken);
     }
 
-    showMessage("Searching Clio...");
+    showMessage("Loading custom fields...");
+    const cfMap = await loadCustomFields(cachedAccessToken);
 
-    const fieldBag = await fetchMatterFieldBagByMatterNumber(cachedAccessToken, matterNumber);
+    showMessage("Searching Clio...");
+    const fieldBag = await fetchMatterFieldBagByMatterNumber(cachedAccessToken, matterNumber, cfMap);
 
     if (!fieldBag) {
       currentMatter = null;
@@ -88,6 +121,7 @@ async function searchMatter() {
     const msg = String(error || "");
     if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
       cachedAccessToken = null;
+      customFieldsById = null;
     }
 
     currentMatter = null;
@@ -201,10 +235,11 @@ async function exchangeCodeForToken(code) {
 /**
  * Two-step fetch:
  *  1) Search list endpoint for id/display_number/client
- *  2) Fetch single matter by id with custom_field_values (Clio allows this on /matters/{id})
+ *  2) Fetch single matter by id with custom_field_values (no nesting)
+ *  3) Build a field bag using cfMap (custom field id->name)
  */
-async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
-  // 1) LIST SEARCH (no custom_field_values here; your tenant rejects it on the list endpoint)
+async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMap) {
+  // 1) LIST SEARCH
   const listFields = "id,display_number,client{name,first_name,last_name},status";
   const listUrl =
     `${LIST_FN}?query=${encodeURIComponent(matterNumber)}` +
@@ -244,10 +279,8 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
   const matterId = match?.id;
   if (!matterId) return null;
 
-  // 2) DETAIL FETCH (custom_field_values is valid here)
-const detailFields = "id,display_number,number,status,client,custom_field_values";
-
-
+  // 2) DETAIL FETCH (custom_field_values is requested safely without nesting)
+  const detailFields = "id,display_number,number,status,client,custom_field_values";
   const detailUrl =
     `${DETAIL_FN}?id=${encodeURIComponent(matterId)}` +
     `&fields=${encodeURIComponent(detailFields)}`;
@@ -269,18 +302,35 @@ const detailFields = "id,display_number,number,status,client,custom_field_values
   const matter = detailJson?.data;
   if (!matter) return null;
 
-  return buildFieldBag(matter);
+  return buildFieldBag(matter, cfMap);
 }
 
-function buildFieldBag(matter) {
+function buildFieldBag(matter, cfMap) {
   const custom = Object.create(null);
-  const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
+  const cfvs = Array.isArray(matter?.custom_field_values) ? matter.custom_field_values : [];
 
+  // IMPORTANT: matter.custom_field_values typically contains custom_field{id} and value.
+  // We translate custom_field.id -> name using cfMap.
   for (const cfv of cfvs) {
-    const name = cfv?.custom_field?.name ? String(cfv.custom_field.name).trim() : "";
+    const id = cfv?.custom_field?.id;
+    if (id == null) continue;
+
+    const meta = cfMap?.[String(id)];
+    const name = meta?.name ? String(meta.name).trim() : null;
     if (!name) continue;
 
-    const val = cfv?.value != null ? String(cfv.value).trim() : "";
+    const raw = cfv?.value;
+
+    let val = null;
+    if (raw == null) val = null;
+    else if (typeof raw === "string") val = raw.trim() || null;
+    else if (typeof raw === "number" || typeof raw === "boolean") val = String(raw);
+    else if (typeof raw === "object") {
+      // Some types may return objects; try common patterns first.
+      if (raw.name) val = String(raw.name).trim();
+      else val = JSON.stringify(raw);
+    } else val = String(raw);
+
     custom[name] = val || null;
   }
 
@@ -324,7 +374,6 @@ function buildFieldBag(matter) {
     __custom: custom,
   };
 }
-
 
 /* ---------- UI helpers ---------- */
 
