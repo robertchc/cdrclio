@@ -1,15 +1,16 @@
-const fetch = require("node-fetch"); // Ensure node-fetch is in your package.json
+const fetch = require("node-fetch");
 
-exports.handler = async (event, context) => {
+exports.handler = async (event) => {
   try {
     const { id, fields } = event.queryStringParameters;
     
-    if (!id) {
-      return { statusCode: 400, body: JSON.stringify({ error: "Matter ID is required" }) };
-    }
+    if (!id) return { statusCode: 400, body: JSON.stringify({ error: "Missing ID" }) };
 
-    // We take the long fields string from the Taskpane and pass it to Clio
-    const clioUrl = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
+    // Clean the fields string to remove anything that isn't a letter, number, or comma
+    const cleanFields = fields ? fields.replace(/[^a-z0-9,_]/gi, '') : "id,display_number";
+
+    // Format the URL properly with the .json extension before the query
+    const clioUrl = `https://app.clio.com/api/v4/matters/${id}.json?fields=${cleanFields}`;
 
     const response = await fetch(clioUrl, {
       method: "GET",
@@ -31,9 +32,6 @@ exports.handler = async (event, context) => {
       body: JSON.stringify(data)
     };
   } catch (error) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: error.message })
-    };
+    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
   }
 };
