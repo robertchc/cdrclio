@@ -245,46 +245,27 @@ return buildFieldBag(matterData, cfMap);
 function buildFieldBag(matter, cfMap) {
   if (!matter) return null;
 
-  const detailsSection = document.getElementById("details-section");
-  const mapSize = Object.keys(cfMap || {}).length;
+  const custom = Object.create(null);
   const cfvs = Array.isArray(matter?.custom_field_values) ? matter.custom_field_values : [];
 
-  // Update Diagnostic to show the Cleaned IDs
-  if (detailsSection) {
-    const debugRows = cfvs.map(cfv => {
-      const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
-      const cleanId = rawId.split('-').pop(); // Get just the number
-      const meta = cfMap ? cfMap[cleanId] : null;
-      const nameInMap = meta ? meta.name : "ID NOT IN MAP";
-      return `ID: ${rawId} -> Match: ${nameInMap}`;
-    });
-
-    detailsSection.innerHTML = `
-      <div style="background:#f3f2f1; padding:8px; font-size:10px; border:1px solid #ccc; max-height: 150px; overflow-y: auto; color: black;">
-        <strong>Diagnostic Info:</strong><br>
-        Map Size: ${mapSize} | Values Found: ${cfvs.length}<br><br>
-        ${debugRows.join("<br>")}
-      </div>
-    `;
-  }
-
-  const custom = Object.create(null);
   for (const cfv of cfvs) {
-    // 1. Get raw ID and clean it (remove 'picklist-', 'date-', etc)
+    // 1. Get the raw ID (e.g., "picklist-812120556")
     const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
     if (!rawId) continue;
-    const cleanId = rawId.split('-').pop(); 
 
-    // 2. Match against map using cleaned ID
-    const meta = cfMap ? cfMap[cleanId] : null;
+    // 2. STRIP THE PREFIX: turns "picklist-812120556" into "812120556"
+    const numericId = rawId.replace(/\D/g, ""); 
+
+    // 3. Look up in your map
+    const meta = cfMap ? cfMap[numericId] : null;
     
     if (meta && meta.name) {
       const key = meta.name.toLowerCase().trim();
       let val = cfv?.value;
       
-      // 3. Handle Picklists/Contacts vs Strings
+      // Handle objects (Picklists/Contacts) vs raw strings
       if (val && typeof val === "object") {
-        val = val.name || val.display_name || JSON.stringify(val);
+        val = val.name || val.display_name || val.first_name || JSON.stringify(val);
       }
       
       custom[key] = (val !== undefined && val !== null) ? String(val).trim() : null;
@@ -292,8 +273,8 @@ function buildFieldBag(matter, cfMap) {
   }
 
   const getCf = (name) => {
-    if (!name) return null;
-    return custom[name.toLowerCase().trim()] || null;
+    if (!name) return "—";
+    return custom[name.toLowerCase().trim()] || "—";
   };
 
   return {
@@ -301,6 +282,8 @@ function buildFieldBag(matter, cfMap) {
     matter_number: matter?.display_number || "—",
     practice_area: (matter?.practice_area?.name || matter?.practice_area || "—"),
     matter_status: matter?.status || "—",
+    
+    // These names must match your Clio Custom Field names exactly (case-insensitive)
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
