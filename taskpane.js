@@ -172,32 +172,43 @@ function buildFieldBag(matter, cfMap) {
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
   cfvs.forEach(cfv => {
-    // 1. Get ID and strip letters
-    const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
+    // 1. Get the ID using every possible Clio path
+    const rawId = String(
+      cfv?.custom_field?.id || 
+      cfv?.custom_field_definition_id || 
+      cfv?.id || 
+      ""
+    );
+    
     const numericId = rawId.replace(/\D/g, ""); 
-    
-    // 2. Get the name from the dictionary
     const meta = cfMap ? cfMap[numericId] : null;
-    
+
     if (meta && meta.name) {
-      // 3. Clean the name (lowercase, remove extra spaces)
-      const nameInClio = meta.name.toLowerCase().trim();
+      const key = meta.name.toLowerCase().trim();
       
-      let val = cfv.value;
-      if (val && typeof val === "object") {
-        val = val.name || val.display_name || val.first_name || JSON.stringify(val);
+      // 2. Extract Value - Handle picklists, strings, and numbers
+      let val = null;
+      if (cfv.value !== undefined && cfv.value !== null) {
+        if (typeof cfv.value === 'object') {
+          // Check for common Clio object properties
+          val = cfv.value.name || cfv.value.display_name || cfv.value.first_name || JSON.stringify(cfv.value);
+        } else {
+          val = cfv.value;
+        }
+      } else if (cfv.picklist_option) {
+        val = cfv.picklist_option.name || cfv.picklist_option.display_name;
       }
-      
-      // 4. Store it by its EXACT name in Clio
-      custom[nameInClio] = (val !== undefined && val !== null) ? String(val).trim() : null;
+
+      if (val !== null) {
+        custom[key] = String(val).trim();
+      }
     }
   });
 
-  // Helper: Try to find a field even if the name is slightly different
-  const getCf = (searchName) => {
-    const s = searchName.toLowerCase().trim();
-    // Try exact match, then try if the Clio name contains our label (e.g. "Judge Name" matches "Judge")
-    return custom[s] || "—";
+  const getCf = (name) => {
+    if (!name) return "—";
+    const found = custom[name.toLowerCase().trim()];
+    return (found && found !== "null") ? found : "—";
   };
 
   return {
@@ -206,7 +217,6 @@ function buildFieldBag(matter, cfMap) {
     practice_area: matter.practice_area?.name || matter.practice_area || "—",
     matter_status: matter.status || "—",
     
-    // These names must match what you typed in Clio EXACTLY
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
