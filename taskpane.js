@@ -40,41 +40,59 @@ async function loadCustomFields(accessToken) {
 async function searchMatter() {
     const input = document.getElementById("matterNumber");
     const matterNumber = (input?.value || "").trim();
-    if (!matterNumber) {
-        showMessage("Please enter a matter number.");
-        return;
-    }
+    if (!matterNumber) return showMessage("Please enter a matter number.");
 
     try {
         if (!cachedAccessToken) {
-            showMessage("Signing in to Clio...");
+            showMessage("Signing in...");
             cachedAccessToken = await authenticateClio();
         }
-        
-        showMessage("Loading field dictionary...");
-        customFieldsById = await loadCustomFields(cachedAccessToken);
 
-        showMessage(`Searching for ${matterNumber}...`);
-        const matterData = await fetchFullMatterData(cachedAccessToken, matterNumber);
+        showMessage("Searching...");
+        // 1. Get the list from clioMatters
+        const lResp = await fetch(`${LIST_FN}?query=${encodeURIComponent(matterNumber)}`, {
+            headers: { Authorization: `Bearer ${cachedAccessToken}` }
+        });
+        const lJson = await lResp.json();
         
-        if (!matterData) {
-            // If the exact search fails, try searching just the first part of the number
-            const partialSearch = matterNumber.split('-')[0];
-            showMessage(`Exact match failed. Trying partial search for ${partialSearch}...`);
-            const fallbackData = await fetchFullMatterData(cachedAccessToken, partialSearch);
-            
-            if (!fallbackData) {
-                showMessage(`No match found for "${matterNumber}".`);
-                return;
-            }
-            processMatterResults(fallbackData);
-        } else {
-            processMatterResults(matterData);
+        // 2. CRITICAL: Safely get the ID from the first record
+        const matterId = lJson.data && lJson.data.length > 0 ? lJson.data[0].id : null;
+
+        if (!matterId) {
+            showMessage(`No match found for ${matterNumber}`);
+            return;
         }
+
+        showMessage("Fetching details...");
+        // 3. Call clioMatterById
+        const dResp = await fetch(`${DETAIL_FN}?id=${matterId}`, {
+            headers: { Authorization: `Bearer ${cachedAccessToken}` }
+        });
+        const dJson = await dResp.json();
         
+        // 4. Update the UI with whatever came back
+        const matter = dJson.data;
+        document.getElementById("debug-raw").textContent = JSON.stringify(matter, null, 2);
+        
+        // Brute force map the IDs we know
+        const cfvs = matter.custom_field_values || [];
+        const getVal = (id) => {
+            const f = cfvs.find(v => String(v.id).includes(id));
+            return f ? (f.value || f.picklist_option?.option || "—") : "—";
+        };
+
+        currentMatter = {
+            client_name: matter.client?.name || "—",
+            matter_number: matter.display_number || "—",
+            case_name: getVal("3528784956"), // Hardcoded ID
+            adverse_party_name: getVal("3528784941") // Hardcoded ID
+        };
+
+        renderFields();
         clearMessage();
-    } catch (error) {
-        showMessage("Search error: " + error.message);
+
+    } catch (err) {
+        showMessage("Taskpane Error: " + err.message);
     }
 }
 
