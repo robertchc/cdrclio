@@ -47,34 +47,20 @@ Office.onReady((info) => {
 });
 
 async function searchMatter() {
-    const input = document.getElementById("matterNumber");
-    const matterNumber = (input?.value || "").trim();
+    // ... (keep the start of the function the same)
     
-    if (!matterNumber) {
-        showMessage("Please enter a matter number.");
-        return;
-    }
-
     try {
-        if (!cachedAccessToken) {
-            showMessage("Signing in to Clio...");
-            cachedAccessToken = await authenticateClio();
-        }
-
-        if (!customFieldsById) {
-            showMessage("Loading field names...");
-            const cfResp = await fetch(CUSTOM_FIELDS_FN, {
-                headers: { Authorization: `Bearer ${cachedAccessToken}` }
-            });
-            const cfJson = await cfResp.json();
-            const rows = cfJson.data || [];
-            customFieldsById = {};
-            rows.forEach(r => { customFieldsById[String(r.id)] = r; });
-        }
+        // ... (keep the auth and cfMap checks)
 
         showMessage("Searching...");
         const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}`;
         const lResp = await fetch(listUrl, { headers: { Authorization: `Bearer ${cachedAccessToken}` } });
+        
+        // --- NEW SAFETY CHECK ---
+        if (!lResp.ok) {
+            const errText = await lResp.text();
+            throw new Error(`Search Function Failed (${lResp.status}): ${errText}`);
+        }
         const lJson = await lResp.json();
         const matterId = lJson.data?.[0]?.id;
 
@@ -86,16 +72,17 @@ async function searchMatter() {
         showMessage("Fetching details...");
         const dUrl = `${DETAIL_FN}?id=${matterId}`;
         const dResp = await fetch(dUrl, { headers: { Authorization: `Bearer ${cachedAccessToken}` } });
+        
+        // --- NEW SAFETY CHECK ---
+        if (!dResp.ok) {
+            const errText = await dResp.text();
+            throw new Error(`Detail Function Failed (${dResp.status}): ${errText}`);
+        }
         const dJson = await dResp.json();
         
-        const debugEl = document.getElementById("debug-raw");
-        if (debugEl) debugEl.textContent = JSON.stringify(dJson, null, 2);
-
-        currentMatter = buildFieldBag(dJson.data, customFieldsById);
-        renderFields();
-        clearMessage();
+        // ... (rest of the function)
     } catch (err) {
-        showMessage("Search Error: " + err.message);
+        showMessage(err.message); // This will now show the REAL error text
     }
 }
 
