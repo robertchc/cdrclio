@@ -3,13 +3,12 @@ const fetch = require("node-fetch");
 exports.handler = async (event) => {
   try {
     const { id } = event.queryStringParameters;
-    if (!id) return { statusCode: 400, body: JSON.stringify({ error: "Missing ID" }) };
+    if (!id) return { statusCode: 400, body: JSON.stringify({ error: "No ID" }) };
 
-    // Clio ONLY accepts nested braces for sub-properties. 
-    // We request every specific key-value pair here.
+    // This string must have NO spaces and perfectly balanced braces
     const fields = "id,display_number,status,client{name},practice_area{name},custom_field_values{id,value,picklist_option{option,name},custom_field{id,name}}";
 
-    // Build the URL manually. No encoding on the braces.
+    // We use a clean URL build
     const clioUrl = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
 
     const response = await fetch(clioUrl, {
