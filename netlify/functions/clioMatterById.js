@@ -41,17 +41,30 @@ exports.handler = async (event) => {
       };
     }
 
+    // IMPORTANT: keep fields conservative; do NOT use nested braces here.
+    // We'll fetch custom field definitions separately if needed.
     const fields =
       event.queryStringParameters?.fields ||
-      "id,display_number,client,custom_field_values{id,value,custom_field}";
+      "id,display_number,number,status,client,custom_field_values";
+
+    // Strip anything after "custom_field_values" if the caller tries to pass nested fields.
+    // This prevents Clio from rejecting it.
+    const safeFields = fields.includes("custom_field_values")
+      ? fields
+          .replace(/custom_field_values\{.*$/i, "custom_field_values")
+          .replace(/,+\s*$/, "")
+      : fields;
 
     const url =
-      `https://app.clio.com/api/v4/matters/${encodeURIComponent(id)}` +
-      `?fields=${encodeURIComponent(fields)}`;
+      `https://app.clio.com/api/v4/matters/${encodeURIComponent(id)}.json` +
+      `?fields=${encodeURIComponent(safeFields)}`;
 
     const resp = await fetch(url, {
       method: "GET",
-      headers: { Authorization: auth, Accept: "application/json" },
+      headers: {
+        Authorization: auth,
+        Accept: "application/json",
+      },
     });
 
     const text = await resp.text();
