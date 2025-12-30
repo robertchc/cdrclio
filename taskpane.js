@@ -104,45 +104,56 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
 
 function buildFieldBag(matter, cfMap) {
   if (!matter) return null;
-  const custom = Object.create(null);
+  const bag = Object.create(null);
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
   cfvs.forEach(cfv => {
-    const defId = String(cfv?.custom_field?.id || "");
-    const instanceId = String(cfv?.id || "");
-    const meta = cfMap ? (cfMap[defId] || cfMap[instanceId]) : null;
-    const name = meta?.name || cfv?.custom_field?.name;
-
+    // Priority 1: Get name from the live API response (most reliable)
+    // Priority 2: Get name from our pre-loaded Custom Field Map
+    const name = cfv.custom_field?.name || (cfMap ? cfMap[String(cfv.custom_field?.id)]?.name : null);
+    
     if (name) {
       const key = name.toLowerCase().trim();
-      let val = cfv.value;
-      if (val && typeof val === "object") {
-        val = val.name || val.display_name || val.option || JSON.stringify(val);
-      }
-      if ((val === null || val === undefined) && cfv.picklist_option) {
+      let val = null;
+
+      // Handle standard text/date values
+      if (cfv.value !== null && cfv.value !== undefined) {
+        val = cfv.value;
+      } 
+      // Handle picklists (the individual request above brings 'option' or 'name')
+      else if (cfv.picklist_option) {
         val = cfv.picklist_option.option || cfv.picklist_option.name;
       }
-      if (val !== null && val !== undefined) {
-        custom[key] = String(val).trim();
+
+      // If it's a contact or object, extract the display name
+      if (val && typeof val === "object") {
+        val = val.name || val.display_name || JSON.stringify(val);
+      }
+
+      if (val !== null) {
+        bag[key] = String(val).trim();
       }
     }
   });
 
-  const getCf = (name) => {
-    const s = name.toLowerCase().trim();
-    return custom[s] || "—";
-  };
+  // Helper to safely get data from our 'bag'
+  const get = (keyName) => bag[keyName.toLowerCase().trim()] || "—";
 
   return {
     client_name: matter.client?.name || "—",
     matter_number: matter.display_number || "—",
     practice_area: matter.practice_area?.name || "—",
     matter_status: matter.status || "—",
-    adverse_party_name: getCf("Adverse Party Name"),
-    case_name: getCf("Case Name (a v. b)"),
-    court_file_no: getCf("Court File No. (Pleadings)"),
-    court_name: getCf("Court (pleadings)"),
-    judge_name: getCf("Judge Name ie. Justice Jim Doe")
+    
+    // MAPPING: Ensure the string inside get("") matches your Clio Custom Field Name EXACTLY
+    adverse_party_name: get("Adverse Party Name"),
+    case_name: get("Case Name (a v. b)"),
+    court_file_no: get("Court File No. (Pleadings)"),
+    court_name: get("Court (pleadings)"),
+    judge_name: get("Judge Name"),
+    date_of_separation: get("Date of Separation"),
+    date_of_marriage: get("Date of Marriage"),
+    matrimonial_status: get("Matrimonial Status")
   };
 }
 
