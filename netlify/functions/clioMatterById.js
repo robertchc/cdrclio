@@ -3,8 +3,8 @@ const fetch = require("node-fetch");
 exports.handler = async (event) => {
   const { id } = event.queryStringParameters;
   
-  // WRONG: matters.json?id=123 (Returns minimal view)
-  // RIGHT: matters/123.json (Returns full view with custom fields)
+  // DOCUMENTATION: https://app.clio.com/api/v4/documentation#tag/Matters/operation/Matter#show
+  // Must be /matters/{id}.json to get the Full view (including custom fields)
   const url = `https://app.clio.com/api/v4/matters/${id}.json`;
 
   try {
@@ -20,10 +20,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: { 
-        "Access-Control-Allow-Origin": "*", 
-        "Content-Type": "application/json" 
-      },
+      headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json" },
       body: JSON.stringify(json) 
     };
   } catch (err) {
