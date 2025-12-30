@@ -50,6 +50,8 @@ Office.onReady((info) => {
   renderFields();
 });
 
+// --- DATA LOADING FUNCTIONS ---
+
 async function loadCustomFields(accessToken) {
   if (customFieldsById) return customFieldsById;
 
@@ -66,7 +68,9 @@ async function loadCustomFields(accessToken) {
   const map = Object.create(null);
   for (const cf of rows) {
     if (cf?.id == null) continue;
-    map[String(cf.id)] = {
+    // Store IDs as clean numeric strings
+    const cleanId = String(cf.id).replace(/\D/g, "");
+    map[cleanId] = {
       name: cf?.name ? String(cf.name).trim() : null,
       field_type: cf?.field_type || null,
     };
@@ -85,7 +89,6 @@ async function searchMatter() {
     return;
   }
 
-  // Clear previous data while loading
   currentMatter = null;
 
   try {
@@ -94,16 +97,14 @@ async function searchMatter() {
       cachedAccessToken = await authenticateClio();
     }
 
-    // 1. Attempt to load Custom Field Definitions
     showMessage("Loading custom fields...");
     try {
       customFieldsById = await loadCustomFields(cachedAccessToken);
     } catch (cfError) {
-      console.warn("Could not load field definitions, continuing with standard fields only.", cfError);
-      customFieldsById = {}; // Fallback to empty object so fetchMatterFieldBag doesn't crash
+      console.warn("Field definitions failed, using fallback.", cfError);
+      customFieldsById = {};
     }
 
-    // 2. Search and Fetch Matter Details
     showMessage("Searching Clio for " + matterNumber + "...");
     const fieldBag = await fetchMatterFieldBagByMatterNumber(cachedAccessToken, matterNumber, customFieldsById);
 
@@ -113,25 +114,115 @@ async function searchMatter() {
       return;
     }
 
-    // 3. Success
     currentMatter = fieldBag;
     renderFields();
     clearMessage();
 
   } catch (error) {
     console.error("Search failed:", error);
-    
-    // Handle specific auth errors
     const msg = String(error || "");
     if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
       cachedAccessToken = null;
       customFieldsById = null;
     }
-
     renderFields();
     showMessage("Search failed: " + (error.message || "Unknown error"));
   }
 }
+
+async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMap) {
+  const listFields = "id,display_number,client{name,first_name,last_name},status,practice_area{name}";
+  const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}&fields=${encodeURIComponent(listFields)}`;
+
+  const listResp = await fetch(listUrl, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+
+  const listJson = await listResp.json();
+  const records = Array.isArray(listJson?.data) ? listJson.data : [];
+  if (!records.length) return null;
+
+  const match = records[0]; 
+  const matterId = match?.id;
+
+  const detailFields = "id,display_number,number,status,client,practice_area,custom_field_values{id,value,picklist_option,custom_field{id}}";
+  const detailUrl = `${DETAIL_FN}?id=${encodeURIComponent(matterId)}&fields=${encodeURIComponent(detailFields)}`;
+
+  const detailResp = await fetch(detailUrl, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+
+  const detailJson = await detailResp.json();
+  const matterData = detailJson?.data;
+
+  if (!matterData) return null;
+
+  // CALL THE BUILDER AND RETURN THE FINAL OBJECT
+  return buildFieldBag(matterData, cfMap);
+}
+
+// --- LOGIC FUNCTIONS ---
+
+function buildFieldBag(matter, cfMap) {
+  if (!matter) return null;
+
+  const custom = Object.create(null);
+  const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
+
+  cfvs.forEach(cfv => {
+    const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
+    const numericId = rawId.replace(/\D/g, ""); 
+    const meta = cfMap ? cfMap[numericId] : null;
+    const name = meta ? meta.name : null;
+
+    if (name) {
+      const key = name.toLowerCase().trim();
+      let val = cfv.value;
+      if (val && typeof val === "object") {
+        val = val.name || val.display_name || val.first_name || JSON.stringify(val);
+      }
+      custom[key] = (val !== undefined && val !== null) ? String(val).trim() : null;
+    }
+  });
+
+  const getCf = (name) => {
+    if (!name) return "—";
+    const found = custom[name.toLowerCase().trim()];
+    return (found && found !== "null") ? found : "—";
+  };
+
+  return {
+    client_name: matter.client?.name || "—",
+    matter_number: matter.display_number || "—",
+    practice_area: matter.practice_area?.name || matter.practice_area || "—",
+    matter_status: matter.status || "—",
+    
+    adverse_party_name: getCf("Adverse Party Name"),
+    case_name: getCf("Case Name (a v. b)"),
+    court_file_no: getCf("Court File No. (Pleadings)"),
+    court_name: getCf("Court (pleadings)"),
+    date_of_separation: getCf("Date of Separation"),
+    date_of_marriage: getCf("Date of Marriage"),
+    date_of_divorce: getCf("Date of Divorce"),
+    date_of_most_recent_order: getCf("Date of Most Recent Order"),
+    type_of_most_recent_order: getCf("Type of Most Recent Order"),
+    judge_name: getCf("Judge Name ie. Justice Jim Doe"),
+    your_honour: getCf("My Lord/Lady/Your Honour"),
+    matter_stage: getCf("Matter stage"),
+    responsible_attorney: getCf("Responsible Attorney"),
+    originating_attorney: getCf("Originating Attorney"),
+    opposing_counsel: getCf("Opposing Counsel"),
+    matrimonial_status: getCf("Matrimonial Status"),
+    cohabitation_begin_date: getCf("Co-Habitation Begin Date"),
+    common_law_begin_date: getCf("Spousal Common-Law Begin Date"),
+    place_of_marriage: getCf("Place of Marriage"),
+    adverse_dob: getCf("Adverse DOB")
+  };
+}
+
+// --- UI & AUTH HELPERS ---
 
 function renderFields() {
   document.querySelectorAll(".cdr-field").forEach((el) => {
@@ -206,108 +297,6 @@ async function exchangeCodeForToken(code) {
     body: JSON.stringify({ code, redirect_uri: REDIRECT_URI, client_id: CLIENT_ID, client_secret: CLIENT_SECRET }),
   });
   return resp.json();
-}
-
-async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMap) {
-  const listFields = "id,display_number,client{name,first_name,last_name},status,practice_area{name}";
-  const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}&fields=${encodeURIComponent(listFields)}`;
-
-  const listResp = await fetch(listUrl, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-  });
-
-  const listJson = await listResp.json();
-  const records = Array.isArray(listJson?.data) ? listJson.data : [];
-  if (!records.length) return null;
-
-  const match = records[0]; // Simple match for brevity
-  const matterId = match?.id;
-
-  const detailFields = "id,display_number,number,status,client,practice_area,custom_field_values{id,value,picklist_option,custom_field{id}}";
-  const detailUrl = `${DETAIL_FN}?id=${encodeURIComponent(matterId)}&fields=${encodeURIComponent(detailFields)}`;
-
-  const detailResp = await fetch(detailUrl, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-  });
-
-// Ensure the end of fetchMatterFieldBagByMatterNumber looks exactly like this:
-const detailJson = await detailResp.json();
-const matterData = detailJson?.data;
-
-if (!matterData) return null;
-
-// Use the cfMap we passed in
-function buildFieldBag(matter, cfMap) {
-  if (!matter) return null;
-
-  const custom = Object.create(null);
-  
-  // Ensure we have an array to work with
-  const cfvs = (matter && matter.custom_field_values && Array.isArray(matter.custom_field_values)) 
-               ? matter.custom_field_values 
-               : [];
-
-  // Loop through the 25 values Clio sent
-  cfvs.forEach(cfv => {
-    // 1. Extract the ID and strip letters (e.g., "date-668809896" -> "668809896")
-    const rawId = String(cfv?.custom_field?.id || cfv?.id || "");
-    const numericId = rawId.replace(/\D/g, ""); 
-
-    // 2. Find the name in the 155-field map
-    const meta = cfMap ? cfMap[numericId] : null;
-    const name = meta ? meta.name : null;
-
-    if (name) {
-      const key = name.toLowerCase().trim();
-      let val = cfv.value;
-
-      // 3. Handle picklists/contacts (objects) vs text (strings)
-      if (val && typeof val === "object") {
-        val = val.name || val.display_name || val.first_name || JSON.stringify(val);
-      }
-      
-      custom[key] = (val !== undefined && val !== null) ? String(val).trim() : null;
-    }
-  });
-
-  // Helper to fetch values by name
-  const getCf = (name) => {
-    if (!name) return "—";
-    const found = custom[name.toLowerCase().trim()];
-    return (found && found !== "null") ? found : "—";
-  };
-
-  // Return the data object for the UI
-  return {
-    client_name: (matter.client && matter.client.name) ? matter.client.name : "—",
-    matter_number: matter.display_number || "—",
-    practice_area: (matter.practice_area && matter.practice_area.name) ? matter.practice_area.name : (matter.practice_area || "—"),
-    matter_status: matter.status || "—",
-    
-    // Field names must match exactly what you see in Clio Manage
-    adverse_party_name: getCf("Adverse Party Name"),
-    case_name: getCf("Case Name (a v. b)"),
-    court_file_no: getCf("Court File No. (Pleadings)"),
-    court_name: getCf("Court (pleadings)"),
-    date_of_separation: getCf("Date of Separation"),
-    date_of_marriage: getCf("Date of Marriage"),
-    date_of_divorce: getCf("Date of Divorce"),
-    date_of_most_recent_order: getCf("Date of Most Recent Order"),
-    type_of_most_recent_order: getCf("Type of Most Recent Order"),
-    judge_name: getCf("Judge Name ie. Justice Jim Doe"),
-    your_honour: getCf("My Lord/Lady/Your Honour"),
-    matter_stage: getCf("Matter stage"),
-    responsible_attorney: getCf("Responsible Attorney"),
-    originating_attorney: getCf("Originating Attorney"),
-    opposing_counsel: getCf("Opposing Counsel"),
-    matrimonial_status: getCf("Matrimonial Status"),
-    cohabitation_begin_date: getCf("Co-Habitation Begin Date"),
-    common_law_begin_date: getCf("Spousal Common-Law Begin Date"),
-    place_of_marriage: getCf("Place of Marriage"),
-    adverse_dob: getCf("Adverse DOB")
-  };
 }
 
 function clearMessage() {
