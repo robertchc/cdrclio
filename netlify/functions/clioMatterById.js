@@ -25,9 +25,10 @@ exports.handler = async (event) => {
     // REVERTED: Using the flat string that worked before. 
     // No nested braces {} which Clio might have been rejecting.
 // We add the parentheses to tell Clio exactly which sub-fields we want inside the values
-const fields = "id,display_number,number,status,client,practice_area,custom_field_values{id,value,custom_field{id,name}}";
+// Pre-encoded version of: id,display_number,status,client,practice_area,custom_field_values{id,value,custom_field{id,name}}
+const fields = "id,display_number,status,client,practice_area,custom_field_values%7Bid,value,custom_field%7Bid,name%7D%7D";
 
-    const url = `https://app.clio.com/api/v4/matters/${encodeURIComponent(id)}.json?fields=${encodeURIComponent(fields)}`;
+const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
 
     const resp = await fetch(url, {
       method: "GET",
