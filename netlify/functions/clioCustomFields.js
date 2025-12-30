@@ -5,7 +5,7 @@ function corsHeaders() {
     "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
     "Access-Control-Allow-Methods": "GET,OPTIONS",
     "Access-Control-Allow-Headers": "Authorization,Content-Type,Accept",
-    Vary: "Origin",
+    "Vary": "Origin",
   };
 }
 
@@ -48,12 +48,19 @@ exports.handler = async (event) => {
     const text = await resp.text();
     const contentType = resp.headers.get("content-type") || "application/json";
 
+    // ---- LOGGING (what we actually need) ----
+    console.log("clioCustomFields status:", resp.status);
+    console.log("clioCustomFields content-type:", contentType);
+    console.log("clioCustomFields body (first 800):", text.slice(0, 800));
+    // ----------------------------------------
+
     return {
       statusCode: resp.status,
       headers: { ...corsHeaders(), "Content-Type": contentType },
       body: text,
     };
   } catch (e) {
+    console.log("clioCustomFields error:", String(e));
     return {
       statusCode: 500,
       headers: { ...corsHeaders(), "Content-Type": "application/json" },
