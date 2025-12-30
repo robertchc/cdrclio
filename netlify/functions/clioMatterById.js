@@ -1,14 +1,13 @@
 const fetch = require("node-fetch");
 
 exports.handler = async (event) => {
-  const id = event.queryStringParameters.id;
-  // We use the absolute path for a single resource. 
-  // We remove ALL field parameters to force Clio to give us the default FULL object.
-  const url = `https://app.clio.com/api/v4/matters/${id}.json`;
-
-  console.log("Fetching absolute resource:", url);
-
   try {
+    const id = event.queryStringParameters.id;
+    // We add a random number to the URL (?_cb=) to force Clio to bypass its cache
+    // We also explicitly ask for the custom_field_values in the fields list 
+    // to leave Clio no choice but to send them.
+    const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=id,display_number,client{name},custom_field_values{id,value,picklist_option{option}}&_cb=${Date.now()}`;
+
     const resp = await fetch(url, {
       method: "GET",
       headers: { 
@@ -21,10 +20,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: { 
-        "Access-Control-Allow-Origin": "*", 
-        "Content-Type": "application/json" 
-      },
+      headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json" },
       body: JSON.stringify(data)
     };
   } catch (err) {
