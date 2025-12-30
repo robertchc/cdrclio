@@ -54,7 +54,6 @@ async function searchMatter() {
         });
         const lJson = await lResp.json();
         
-        // Clio returns an array of matches in the .data property
         const matterId = (lJson.data && lJson.data.length > 0) ? lJson.data[0].id : null;
 
         if (!matterId) {
@@ -68,7 +67,8 @@ async function searchMatter() {
         });
         const dJson = await dResp.json();
         
-        // DOCUMENTATION CHECK: Clio wraps single resources in a "data" object
+        // SURGICAL FIX: Clio single resource responses wrap the fields in a 'data' property.
+        // We must point to dJson.data to avoid 'undefined' errors.
         const matter = dJson.data;
 
         if (!matter) {
@@ -76,17 +76,15 @@ async function searchMatter() {
             return;
         }
 
-        // Show the raw data in the debug box immediately for your audit
+        // Show the raw data in the debug box so you can see if custom_field_values exists
         document.getElementById("debug-raw").textContent = JSON.stringify(matter, null, 2);
         
-        // DOCUMENTATION CHECK: custom_field_values is an array of objects
         const cfvs = matter.custom_field_values || [];
         
-        // Helper to find value by matching your known ID suffix
+        // SURGICAL FIX: Find by ID string containing your specific hardcoded IDs.
         const getVal = (id) => {
             const found = cfvs.find(v => String(v.id).includes(id));
             if (!found) return "—";
-            // Check for picklist vs standard value per Clio's schema
             return found.value || (found.picklist_option ? found.picklist_option.option : "—");
         };
 
@@ -95,7 +93,6 @@ async function searchMatter() {
             matter_number: matter.display_number || "—",
             practice_area: matter.practice_area?.name || "—",
             matter_status: matter.status || "—",
-            // Mapping using your confirmed ID numbers
             case_name: getVal("3528784956"),
             adverse_party_name: getVal("3528784941"),
             court_file_no: getVal("3528784971"),
@@ -112,80 +109,19 @@ async function searchMatter() {
     }
 }
 
+// These helper functions are now redundant but kept to avoid breaking your file structure
 async function fetchFullMatterData(accessToken, query) {
-    // 1. Get the list of matches
     const listUrl = `${LIST_FN}?query=${encodeURIComponent(query)}`;
     const listResp = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
     const listJson = await listResp.json();
     const records = listJson?.data || [];
     if (!records.length) return null;
 
-    // 2. Take the first result and get the deep details
     const matterId = records[0].id;
     const detailUrl = `${DETAIL_FN}?id=${matterId}`;
     const detailResp = await fetch(detailUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
     const detailJson = await detailResp.json();
     return detailJson.data;
-}
-
-function processMatterResults(matter) {
-    // 1. Update the Debug Window
-    updateDebugWindow(matter, customFieldsById);
-
-    // 2. Map to UI
-    currentMatter = buildFieldBag(matter, customFieldsById);
-    renderFields();
-}
-
-function buildFieldBag(matter, cfMap) {
-    if (!matter) return null;
-    const custom = {};
-    const cfvs = matter.custom_field_values || [];
-
-    cfvs.forEach(cfv => {
-        const rawId = String(cfv.id || "");
-        const cleanId = rawId.includes("-") ? rawId.split("-")[1] : rawId;
-        const name = cfMap[cleanId]?.name;
-
-        if (name) {
-            const key = name.toLowerCase().trim();
-            let val = cfv.value;
-            if (!val && cfv.picklist_option) val = cfv.picklist_option.option;
-            if (val && typeof val === "object") val = val.name || val.display_name;
-            custom[key] = String(val || "").trim();
-        }
-    });
-
-    const get = (n) => custom[n.toLowerCase().trim()] || "—";
-
-    return {
-        client_name: matter.client?.name || "—",
-        matter_number: matter.display_number || "—",
-        practice_area: matter.practice_area?.name || "—",
-        matter_status: matter.status || "—",
-        adverse_party_name: get("Adverse Party Name"),
-        case_name: get("Case Name (a v. b)"),
-        court_file_no: get("Court File No. (Pleadings)"),
-        court_name: get("Court (pleadings)"),
-        judge_name: get("Judge Name")
-    };
-}
-
-function updateDebugWindow(matter, cfMap) {
-    const debugEl = document.getElementById("debug-raw");
-    if (!debugEl) return;
-
-    let log = `MATTER: ${matter.display_number}\n`;
-    log += `----------------------------------\n`;
-
-    (matter.custom_field_values || []).forEach(cfv => {
-        const cleanId = String(cfv.id).split('-')[1] || cfv.id;
-        const name = cfMap[cleanId]?.name || `ID: ${cleanId}`;
-        let val = cfv.value || cfv.picklist_option?.option || "—";
-        log += `${name}: ${val}\n`;
-    });
-
-    debugEl.textContent = log;
 }
 
 function renderFields() {
@@ -200,8 +136,6 @@ function renderFields() {
         else el.classList.remove("cdr-field-empty");
     });
 }
-
-// --- AUTH & HELPERS ---
 
 function authenticateClio() {
     return new Promise((resolve, reject) => {
@@ -240,11 +174,9 @@ function clearMessage() {
     if (msg) msg.remove();
 }
 
-// --- INITIALIZE ---
 Office.onReady((info) => {
     if (info.host !== Office.HostType.Word) return;
     document.getElementById("app-body").style.display = "block";
-    
     document.getElementById("searchButton").onclick = searchMatter;
 
     document.querySelectorAll(".cdr-group-toggle").forEach((toggle) => {
