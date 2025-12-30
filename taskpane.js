@@ -245,10 +245,8 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber) {
   if (!matterId) return null;
 
   // 2) DETAIL FETCH (custom_field_values is valid here)
-const detailFields =
-  "id,display_number,number,status," +
-  "client{name,first_name,last_name}," +
-  "custom_field_values{id,value,custom_field{id,name}}";
+const detailFields = "id,display_number,number,status,client,custom_field_values";
+
 
   const detailUrl =
     `${DETAIL_FN}?id=${encodeURIComponent(matterId)}` +
