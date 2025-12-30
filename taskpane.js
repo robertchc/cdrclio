@@ -109,34 +109,43 @@ function buildFieldBag(matter, cfMap) {
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
   cfvs.forEach(cfv => {
-    // Priority 1: Get name from the live API response (most reliable)
-    // Priority 2: Get name from our pre-loaded Custom Field Map
-    const name = cfv.custom_field?.name || (cfMap ? cfMap[String(cfv.custom_field?.id)]?.name : null);
+    // 1. Get the ID (strip the 'text_line-' prefix if it exists)
+    const rawId = String(cfv.id || "");
+    const cleanId = rawId.includes("-") ? rawId.split("-")[1] : rawId;
+
+    // 2. Look up the name in the map we got from clioCustomFields.js
+    const meta = cfMap ? cfMap[cleanId] : null;
+    const name = meta?.name;
     
     if (name) {
       const key = name.toLowerCase().trim();
-      let val = null;
+      let val = cfv.value;
 
-      // Handle standard text/date values
-      if (cfv.value !== null && cfv.value !== undefined) {
-        val = cfv.value;
-      } 
-      // Handle picklists (the individual request above brings 'option' or 'name')
-      else if (cfv.picklist_option) {
+      // Handle picklists
+      if (!val && cfv.picklist_option) {
         val = cfv.picklist_option.option || cfv.picklist_option.name;
       }
 
-      // If it's a contact or object, extract the display name
-      if (val && typeof val === "object") {
-        val = val.name || val.display_name || JSON.stringify(val);
-      }
-
-      if (val !== null) {
+      if (val !== null && val !== undefined) {
         bag[key] = String(val).trim();
       }
     }
   });
 
+  const get = (k) => bag[k.toLowerCase().trim()] || "—";
+
+  return {
+    client_name: matter.client?.name || "—",
+    matter_number: matter.display_number || "—",
+    practice_area: (typeof matter.practice_area === 'object') ? matter.practice_area.name : (matter.practice_area || "—"),
+    matter_status: matter.status || "—",
+    adverse_party_name: get("Adverse Party Name"),
+    case_name: get("Case Name (a v. b)"),
+    court_file_no: get("Court File No. (Pleadings)"),
+    court_name: get("Court (pleadings)"),
+    judge_name: get("Judge Name")
+  };
+}
   // Helper to safely get data from our 'bag'
   const get = (keyName) => bag[keyName.toLowerCase().trim()] || "—";
 
