@@ -245,26 +245,47 @@ return buildFieldBag(matterData, cfMap);
 function buildFieldBag(matter, cfMap) {
   if (!matter) return null;
   const custom = Object.create(null);
+  
+  // Clio returns custom field values as an array
   const cfvs = Array.isArray(matter?.custom_field_values) ? matter.custom_field_values : [];
 
+  // Loop through the values Clio sent back
   for (const cfv of cfvs) {
-    const id = cfv?.custom_field?.id;
-    const meta = cfMap?.[String(id)];
-    if (!meta?.name) continue;
+    // In the "Flat" version, the ID is often inside a nested custom_field object
+    const id = cfv?.custom_field?.id || cfv?.id; 
+    if (!id) continue;
 
-    const key = meta.name.toLowerCase().trim();
-    let val = cfv?.picklist_option?.option || cfv?.value;
-
-    if (val && typeof val === "object") {
-      val = val.name || val.display_name || JSON.stringify(val);
+    // Look up the name of this field from the map we loaded earlier
+    const meta = cfMap ? cfMap[String(id)] : null;
+    if (meta && meta.name) {
+      // Normalize the name to lowercase/trimmed for consistent matching
+      const key = meta.name.toLowerCase().trim();
+      
+      // Get the value (handle picklist objects or raw strings)
+      let val = cfv?.value;
+      if (val && typeof val === "object") {
+        val = val.name || val.display_name || JSON.stringify(val);
+      }
+      
+      custom[key] = val != null ? String(val).trim() : null;
     }
-    custom[key] = val != null ? String(val).trim() : null;
   }
 
-  const getCf = (name) => custom[name.toLowerCase().trim()] || null;
+  // Helper to retrieve values by name safely
+  const getCf = (name) => {
+    if (!name) return null;
+    return custom[name.toLowerCase().trim()] || null;
+  };
 
+  // Return the combined "bag" of fields for the UI
   return {
+    // Standard Fields (already working)
     client_name: matter?.client?.name || "—",
+    matter_number: matter?.display_number || "—",
+    practice_area: (typeof matter?.practice_area === 'object' ? matter.practice_area.name : matter.practice_area) || "—",
+    matter_status: matter?.status || "—",
+    
+    // Custom Field Mappings (using the getCf helper)
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
@@ -276,9 +297,6 @@ function buildFieldBag(matter, cfMap) {
     type_of_most_recent_order: getCf("Type of Most Recent Order"),
     judge_name: getCf("Judge Name ie. Justice Jim Doe"),
     your_honour: getCf("My Lord/Lady/Your Honour"),
-    matter_number: matter?.display_number || "—",
-    practice_area: matter?.practice_area?.name || "—",
-    matter_status: matter?.status || "—",
     matter_stage: getCf("Matter stage"),
     responsible_attorney: getCf("Responsible Attorney"),
     originating_attorney: getCf("Originating Attorney"),
@@ -287,7 +305,7 @@ function buildFieldBag(matter, cfMap) {
     cohabitation_begin_date: getCf("Co-Habitation Begin Date"),
     common_law_begin_date: getCf("Spousal Common-Law Begin Date"),
     place_of_marriage: getCf("Place of Marriage"),
-    adverse_dob: getCf("Adverse DOB"),
+    adverse_dob: getCf("Adverse DOB")
   };
 }
 
