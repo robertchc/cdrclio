@@ -3,18 +3,17 @@ const fetch = require("node-fetch");
 exports.handler = async (event) => {
   try {
     const { id } = event.queryStringParameters;
-    if (!id) return { statusCode: 400, body: JSON.stringify({ error: "No ID provided" }) };
+    if (!id) return { statusCode: 400, body: JSON.stringify({ error: "No ID" }) };
 
-    // PERFECTLY BALANCED BRACES - NO SPACES
-    const fieldString = "id,display_number,status,client{name},practice_area{name},custom_field_values{id,value,picklist_option{option,name},custom_field{id,name}}";
-    
-    // Constructing the URL explicitly to avoid template literal issues
-    const clioUrl = "https://app.clio.com/api/v4/matters/" + id + ".json?fields=" + fieldString;
+    // NO BRACKETS. Just the top-level keys.
+    const fields = "id,display_number,status,client,practice_area,custom_field_values";
+
+    const clioUrl = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
 
     const response = await fetch(clioUrl, {
       method: "GET",
       headers: {
-        "Authorization": event.headers.authorization || event.headers.Authorization,
+        "Authorization": event.headers.authorization,
         "Accept": "application/json"
       }
     });
@@ -23,10 +22,9 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: {
+      headers: { 
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json" 
       },
       body: JSON.stringify(data)
     };
