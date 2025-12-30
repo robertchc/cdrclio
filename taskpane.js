@@ -49,14 +49,13 @@ async function searchMatter() {
         }
 
         showMessage("Searching...");
-        // 1. Get the list from clioMatters
         const lResp = await fetch(`${LIST_FN}?query=${encodeURIComponent(matterNumber)}`, {
             headers: { Authorization: `Bearer ${cachedAccessToken}` }
         });
         const lJson = await lResp.json();
         
-        // 2. CRITICAL: Safely get the ID from the first record
-        const matterId = lJson.data && lJson.data.length > 0 ? lJson.data[0].id : null;
+        // Clio returns an array of matches in the .data property
+        const matterId = (lJson.data && lJson.data.length > 0) ? lJson.data[0].id : null;
 
         if (!matterId) {
             showMessage(`No match found for ${matterNumber}`);
@@ -64,28 +63,44 @@ async function searchMatter() {
         }
 
         showMessage("Fetching details...");
-        // 3. Call clioMatterById
         const dResp = await fetch(`${DETAIL_FN}?id=${matterId}`, {
             headers: { Authorization: `Bearer ${cachedAccessToken}` }
         });
         const dJson = await dResp.json();
         
-        // 4. Update the UI with whatever came back
+        // DOCUMENTATION CHECK: Clio wraps single resources in a "data" object
         const matter = dJson.data;
+
+        if (!matter) {
+            showMessage("Error: Matter details could not be retrieved.");
+            return;
+        }
+
+        // Show the raw data in the debug box immediately for your audit
         document.getElementById("debug-raw").textContent = JSON.stringify(matter, null, 2);
         
-        // Brute force map the IDs we know
+        // DOCUMENTATION CHECK: custom_field_values is an array of objects
         const cfvs = matter.custom_field_values || [];
+        
+        // Helper to find value by matching your known ID suffix
         const getVal = (id) => {
-            const f = cfvs.find(v => String(v.id).includes(id));
-            return f ? (f.value || f.picklist_option?.option || "—") : "—";
+            const found = cfvs.find(v => String(v.id).includes(id));
+            if (!found) return "—";
+            // Check for picklist vs standard value per Clio's schema
+            return found.value || (found.picklist_option ? found.picklist_option.option : "—");
         };
 
         currentMatter = {
             client_name: matter.client?.name || "—",
             matter_number: matter.display_number || "—",
-            case_name: getVal("3528784956"), // Hardcoded ID
-            adverse_party_name: getVal("3528784941") // Hardcoded ID
+            practice_area: matter.practice_area?.name || "—",
+            matter_status: matter.status || "—",
+            // Mapping using your confirmed ID numbers
+            case_name: getVal("3528784956"),
+            adverse_party_name: getVal("3528784941"),
+            court_file_no: getVal("3528784971"),
+            court_name: getVal("3528784986"),
+            judge_name: getVal("4815771545")
         };
 
         renderFields();
@@ -93,6 +108,7 @@ async function searchMatter() {
 
     } catch (err) {
         showMessage("Taskpane Error: " + err.message);
+        console.error(err);
     }
 }
 
