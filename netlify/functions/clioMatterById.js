@@ -17,15 +17,16 @@ exports.handler = async (event) => {
 
     const auth = event.headers.authorization || event.headers.Authorization;
     const id = event.queryStringParameters?.id;
-    
+
     if (!id || !auth) {
       return { statusCode: 400, headers: corsHeaders(), body: "Missing ID or Auth" };
     }
 
-    // We keep the fields string simple to avoid API rejections
-    const fields = "id,display_number,status,client{name,first_name,last_name},practice_area{name},custom_field_values{id,value,picklist_option,custom_field{id}}";
+    // REVERTED: Using the flat string that worked before. 
+    // No nested braces {} which Clio might have been rejecting.
+    const fields = "id,display_number,number,status,client,practice_area,custom_field_values";
 
-    const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${encodeURIComponent(fields)}`;
+    const url = `https://app.clio.com/api/v4/matters/${encodeURIComponent(id)}.json?fields=${encodeURIComponent(fields)}`;
 
     const resp = await fetch(url, {
       method: "GET",
@@ -35,12 +36,12 @@ exports.handler = async (event) => {
       },
     });
 
-    // Return raw text to maintain the exact structure taskpane.js expects
     const text = await resp.text();
+    const contentType = resp.headers.get("content-type") || "application/json";
 
     return {
       statusCode: resp.status,
-      headers: { ...corsHeaders(), "Content-Type": "application/json" },
+      headers: { ...corsHeaders(), "Content-Type": contentType },
       body: text,
     };
   } catch (e) {
