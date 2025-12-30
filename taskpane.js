@@ -244,48 +244,47 @@ return buildFieldBag(matterData, cfMap);
 
 function buildFieldBag(matter, cfMap) {
   if (!matter) return null;
+
+  // DIAGNOSTIC 1: Check if the Field Map actually exists
+  const mapSize = Object.keys(cfMap || {}).length;
+  alert("Diagnostic: Map size is " + mapSize);
+
   const custom = Object.create(null);
-  
-  // Clio returns custom field values as an array
   const cfvs = Array.isArray(matter?.custom_field_values) ? matter.custom_field_values : [];
 
-  // Loop through the values Clio sent back
+  // DIAGNOSTIC 2: Check if the matter actually has custom values
+  if (cfvs.length === 0) {
+    alert("Diagnostic: Matter has 0 custom field values.");
+  }
+
   for (const cfv of cfvs) {
-    // In the "Flat" version, the ID is often inside a nested custom_field object
+    // Check both possible ID locations
     const id = cfv?.custom_field?.id || cfv?.id; 
     if (!id) continue;
 
-    // Look up the name of this field from the map we loaded earlier
     const meta = cfMap ? cfMap[String(id)] : null;
     if (meta && meta.name) {
-      // Normalize the name to lowercase/trimmed for consistent matching
       const key = meta.name.toLowerCase().trim();
-      
-      // Get the value (handle picklist objects or raw strings)
       let val = cfv?.value;
       if (val && typeof val === "object") {
         val = val.name || val.display_name || JSON.stringify(val);
       }
-      
       custom[key] = val != null ? String(val).trim() : null;
     }
   }
 
-  // Helper to retrieve values by name safely
   const getCf = (name) => {
     if (!name) return null;
-    return custom[name.toLowerCase().trim()] || null;
+    const val = custom[name.toLowerCase().trim()];
+    return val || null;
   };
 
-  // Return the combined "bag" of fields for the UI
   return {
-    // Standard Fields (already working)
     client_name: matter?.client?.name || "—",
     matter_number: matter?.display_number || "—",
-    practice_area: (typeof matter?.practice_area === 'object' ? matter.practice_area.name : matter.practice_area) || "—",
+    practice_area: (matter?.practice_area?.name || matter?.practice_area || "—"),
     matter_status: matter?.status || "—",
     
-    // Custom Field Mappings (using the getCf helper)
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
