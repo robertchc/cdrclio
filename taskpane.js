@@ -85,36 +85,51 @@ async function searchMatter() {
     return;
   }
 
+  // Clear previous data while loading
+  currentMatter = null;
+
   try {
     if (!cachedAccessToken) {
       showMessage("Signing in to Clio...");
       cachedAccessToken = await authenticateClio();
     }
 
+    // 1. Attempt to load Custom Field Definitions
     showMessage("Loading custom fields...");
-    const cfMap = await loadCustomFields(cachedAccessToken);
-    
-    // DIAGNOSTIC ALERT
-    const mapSize = Object.keys(cfMap || {}).length;
-    alert("Field Definitions Found: " + mapSize);
+    try {
+      customFieldsById = await loadCustomFields(cachedAccessToken);
+    } catch (cfError) {
+      console.warn("Could not load field definitions, continuing with standard fields only.", cfError);
+      customFieldsById = {}; // Fallback to empty object so fetchMatterFieldBag doesn't crash
+    }
 
-    showMessage("Searching Clio...");
-    const fieldBag = await fetchMatterFieldBagByMatterNumber(cachedAccessToken, matterNumber, cfMap);
+    // 2. Search and Fetch Matter Details
+    showMessage("Searching Clio for " + matterNumber + "...");
+    const fieldBag = await fetchMatterFieldBagByMatterNumber(cachedAccessToken, matterNumber, customFieldsById);
 
     if (!fieldBag) {
-      currentMatter = null;
       renderFields();
       showMessage(`No match found for matter # ${matterNumber}.`);
       return;
     }
 
+    // 3. Success
     currentMatter = fieldBag;
     renderFields();
     clearMessage();
+
   } catch (error) {
-    alert("CRITICAL ERROR: " + error.message);
     console.error("Search failed:", error);
-    showMessage("Search failed (see console).");
+    
+    // Handle specific auth errors
+    const msg = String(error || "");
+    if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
+      cachedAccessToken = null;
+      customFieldsById = null;
+    }
+
+    renderFields();
+    showMessage("Search failed: " + (error.message || "Unknown error"));
   }
 }
 
@@ -217,8 +232,14 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
 
-  const detailJson = await detailResp.json();
-  return buildFieldBag(detailJson?.data, cfMap);
+// Ensure the end of fetchMatterFieldBagByMatterNumber looks exactly like this:
+const detailJson = await detailResp.json();
+const matterData = detailJson?.data;
+
+if (!matterData) return null;
+
+// Use the cfMap we passed in
+return buildFieldBag(matterData, cfMap);
 }
 
 function buildFieldBag(matter, cfMap) {
