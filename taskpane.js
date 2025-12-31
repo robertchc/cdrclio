@@ -172,12 +172,14 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
     "id,display_number,number,status,client{name,first_name,last_name},practice_area{name}," +
     "custom_field_values{id,value,picklist_option,custom_field{id}}";
 
-  const detailUrl = `${DETAIL_FN}?id=${encodeURIComponent(matterId)}&fields=${encodeURIComponent(detailFields)}`;
+// taskpane.js
+// Simplify! Don't pass fields from here.
+const detailUrl = `${DETAIL_FN}?id=${encodeURIComponent(matterId)}`;
 
-  const detailResp = await fetch(detailUrl, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-  });
+const detailResp = await fetch(detailUrl, {
+  method: "GET",
+  headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+});
 
   const detailText = await detailResp.text();
 
