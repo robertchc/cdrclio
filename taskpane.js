@@ -15,88 +15,19 @@ let currentMatter = null;
 /**
  * CORE LOGIC: Search for a matter and fetch deep details
  */
-async function searchMatter() {
-    const input = document.getElementById("matterNumber");
-    const matterNumber = (input?.value || "").trim();
-    if (!matterNumber) return showMessage("Please enter a matter number.");
+// 1. Initial Search
+const lResp = await fetch(`${LIST_FN}?query=${encodeURIComponent(matterNumber)}`, {
+    headers: { Authorization: `Bearer ${cachedAccessToken}` }
+});
+const lJson = await lResp.json();
 
-    try {
-        if (!cachedAccessToken) {
-            showMessage("Signing in...");
-            cachedAccessToken = await authenticateClio();
-        }
+// Since we requested the fields in the list call, the data is already here!
+const matter = (lJson.data && lJson.data.length > 0) ? lJson.data[0] : null;
 
-        showMessage("Searching...");
-        
-        // 1. Initial Search to get the Internal ID
-        const lResp = await fetch(`${LIST_FN}?query=${encodeURIComponent(matterNumber)}`, {
-            headers: { Authorization: `Bearer ${cachedAccessToken}` }
-        });
-        const lJson = await lResp.json();
-        
-        // Clio returns list results in a .data array
-        const matterId = (lJson.data && lJson.data.length > 0) ? lJson.data[0].id : null;
-
-        if (!matterId) {
-            showMessage(`No match found for ${matterNumber}`);
-            return;
-        }
-
-        showMessage("Fetching full details...");
-
-        // 2. Fetch specific record via the "Show" endpoint
-        const dResp = await fetch(`${DETAIL_FN}?id=${matterId}`, {
-            headers: { Authorization: `Bearer ${cachedAccessToken}` }
-        });
-        const dJson = await dResp.json();
-        
-        // SUCCESS CHECK: Clio wraps single resource responses in a "data" object.
-        // If your Netlify function uses /matters/{id}.json, dJson.data will exist.
-        const matter = dJson.data;
-
-        if (!matter) {
-            showMessage("Error: Matter details could not be retrieved from the server.");
-            // Dump the raw response to debug even if it's the 3-line version
-            document.getElementById("debug-raw").textContent = JSON.stringify(dJson, null, 2);
-            return;
-        }
-
-        // Show the full data dump in the debug window for your audit
-        document.getElementById("debug-raw").textContent = JSON.stringify(matter, null, 2);
-        
-        const cfvs = matter.custom_field_values || [];
-        
-        /**
-         * Helper to extract values from the Custom Field Array.
-         * Matches IDs like "3528784956" within the string ID "text_line-3528784956"
-         */
-        const getVal = (id) => {
-            const found = cfvs.find(v => String(v.id).includes(id));
-            if (!found) return "—";
-            // Returns standard value or the option text from a picklist
-            return found.value || (found.picklist_option ? found.picklist_option.option : "—");
-        };
-
-        // Map the API response to the Taskpane's data-field keys
-        currentMatter = {
-            client_name: matter.client?.name || "—",
-            matter_number: matter.display_number || "—",
-            practice_area: matter.practice_area?.name || "—",
-            matter_status: matter.status || "—",
-            case_name: getVal("3528784956"),
-            adverse_party_name: getVal("3528784941"),
-            court_file_no: getVal("3528784971"),
-            court_name: getVal("3528784986"),
-            judge_name: getVal("4815771545")
-        };
-
-        renderFields();
-        clearMessage();
-
-    } catch (err) {
-        showMessage("Taskpane Error: " + err.message);
-        console.error(err);
-    }
+if (matter) {
+   // Use 'matter' directly to populate your taskpane
+   document.getElementById("debug-raw").textContent = JSON.stringify(matter, null, 2);
+   // ... rest of your mapping logic
 }
 
 /**
