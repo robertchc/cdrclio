@@ -5,11 +5,11 @@ exports.handler = async (event) => {
   
   const customFieldIds = ["3528784956", "3528784941", "3528784971", "3528784986", "4815771545"];
   
-  // FIX: Use parentheses () instead of curly braces {}
-  const fields = "id,display_number,client(name),practice_area(name),status,custom_field_values(id,value,field_name,picklist_option(option))";
+  // Simplified fields - no nesting yet
+  const fields = "id,display_number,client,practice_area,status,custom_field_values";
   
   const cfFilter = customFieldIds.map(id => `custom_field_ids[]=${id}`).join('&');
-  const url = `https://app.clio.com/api/v4/matters.json?query=${encodeURIComponent(query)}&fields=${fields}&${cfFilter}`;
+  const url = `https://app.clio.com/api/v4/matters.json?query=${encodeURIComponent(query)}&fields=${encodeURIComponent(fields)}&${cfFilter}`;
   
   try {
     const resp = await fetch(url, {
