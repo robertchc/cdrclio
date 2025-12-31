@@ -136,74 +136,34 @@ async function searchMatter() {
 }
 
 async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMap) {
-  // Keep list lightweight
-  const listFields = "id,display_number,client{name,first_name,last_name},status,practice_area{name}";
-  const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}&fields=${encodeURIComponent(listFields)}`;
+  // 1. Search for the Matter ID (Keep URL simple)
+  const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}`;
 
   const listResp = await fetch(listUrl, {
     method: "GET",
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
 
-  const listText = await listResp.text();
-  let listJson;
-  try {
-    listJson = JSON.parse(listText);
-  } catch {
-    debugRaw({ step: "LIST_FN", status: listResp.status, ok: listResp.ok, body: listText });
-    throw new Error(`Matter search returned non-JSON (${listResp.status})`);
-  }
-
-  debugRaw(listJson);
-
-  if (!listResp.ok) {
-    throw new Error(`Matter search failed (${listResp.status}): ${listText}`);
-  }
-
-  const records = Array.isArray(listJson?.data) ? listJson.data : [];
+  if (!listResp.ok) throw new Error(`Search failed: ${listResp.status}`);
+  const listJson = await listResp.json();
+  const records = listJson?.data || [];
   if (!records.length) return null;
 
-  const match = records[0];
-  const matterId = match?.id;
-  if (!matterId) return null;
+  const matterId = records[0].id;
 
+  // 2. Get the full Detail (Brackets are now handled safely inside the Netlify function)
+  const detailUrl = `${DETAIL_FN}?id=${matterId}`;
 
-// taskpane.js
-// Simplify! Don't pass fields from here.
-const detailUrl = `${DETAIL_FN}?id=${encodeURIComponent(matterId)}`;
-
-const detailResp = await fetch(detailUrl, {
-  method: "GET",
-  headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-});
-
-  const detailText = await detailResp.text();
-
-  // Always log DETAIL response, even on errors / non-JSON
-  debugRaw({
-    step: "DETAIL_FN",
-    url: detailUrl,
-    status: detailResp.status,
-    ok: detailResp.ok,
-    body: detailText,
+  const detailResp = await fetch(detailUrl, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
 
-  if (!detailResp.ok) {
-    throw new Error(`Matter detail failed (${detailResp.status}): ${detailText}`);
-  }
+  const detailText = await detailResp.text();
+  if (!detailResp.ok) throw new Error(`Detail failed: ${detailText}`);
 
-  let detailJson;
-  try {
-    detailJson = JSON.parse(detailText);
-  } catch {
-    throw new Error(`Matter detail returned non-JSON (${detailResp.status}): ${detailText}`);
-  }
-
-  // Optional: replace debug output with parsed JSON when it succeeds
-  debugRaw(detailJson);
-
+  const detailJson = JSON.parse(detailText);
   const matterData = detailJson?.data;
-  if (!matterData) return null;
 
   return buildFieldBag(matterData, cfMap);
 }
