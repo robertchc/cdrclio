@@ -1,32 +1,24 @@
 const fetch = require("node-fetch");
 
 exports.handler = async (event) => {
-  const { id } = event.queryStringParameters;
+  const { id, fields } = event.queryStringParameters || {};
   if (!id) return { statusCode: 400, body: "Missing ID" };
 
-  const fields = "id,display_number,client,practice_area,status,custom_field_values";
-  
-  // encodeURI handles the brackets and commas so Clio doesn't choke on them
-  const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${encodeURIComponent(fields)}`;
+  const defaultFields =
+    "id,display_number,number,status,client{name},practice_area{name}," +
+    "custom_field_values{id,value,picklist_option,custom_field{id}}";
 
+  const url =
+    `https://app.clio.com/api/v4/matters/${id}.json` +
+    `?fields=${encodeURIComponent(fields || defaultFields)}`;
 
-  try {
-    const resp = await fetch(url, {
-      method: "GET",
-      headers: { 
-        "Authorization": event.headers.authorization,
-        "Accept": "application/json"
-      }
-    });
+  const resp = await fetch(url, {
+    headers: { Authorization: event.headers.authorization },
+  });
 
-    const json = await resp.json();
-
-    return {
-      statusCode: 200,
-      headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify(json) 
-    };
-  } catch (err) {
-    return { statusCode: 500, body: err.message };
-  }
+  return {
+    statusCode: resp.status,
+    headers: { "Access-Control-Allow-Origin": "*" },
+    body: await resp.text(),
+  };
 };
