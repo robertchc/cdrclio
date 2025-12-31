@@ -27,8 +27,7 @@ exports.handler = async (event) => {
     }
 
     // Fetch a few fields from Clio; tweak as needed
-    const url =
-      "https://app.clio.com/api/v4/matters?limit=25&fields=id,display_number,client{name},status,description";
+    const url = "https://app.clio.com/api/v4/matters?limit=25&fields=id,display_number,client%7Bname%7D,status,description";
     const resp = await fetch(url, {
       method: "GET",
       headers: {
@@ -80,3 +79,4 @@ function getCookie(cookieHeader, name) {
   const m = cookieHeader.match(new RegExp(`(?:^|; )${name}=([^;]+)`));
   return m ? decodeURIComponent(m[1]) : null;
 }
+
