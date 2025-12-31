@@ -7,38 +7,89 @@ const REDIRECT_URI = `${BASE_URL}/auth.html`;
 const DIALOG_START_URL = `${BASE_URL}/auth-start.html`;
 
 const LIST_FN = `${BASE_URL}/.netlify/functions/clioMatters`;
-const DETAIL_FN = `${BASE_URL}/.netlify/functions/clioMatterById`;
 
 let cachedAccessToken = null;
 let currentMatter = null;
 
 /**
- * CORE LOGIC: Search for a matter and fetch deep details
+ * CORE LOGIC: Search for a matter and extract custom fields in one go
  */
-// 1. Initial Search
-const lResp = await fetch(`${LIST_FN}?query=${encodeURIComponent(matterNumber)}`, {
-    headers: { Authorization: `Bearer ${cachedAccessToken}` }
-});
-const lJson = await lResp.json();
+async function searchMatter() {
+    const input = document.getElementById("matterNumber");
+    const matterNumber = (input?.value || "").trim();
+    if (!matterNumber) return showMessage("Please enter a matter number.");
 
-// Since we requested the fields in the list call, the data is already here!
-const matter = (lJson.data && lJson.data.length > 0) ? lJson.data[0] : null;
+    try {
+        if (!cachedAccessToken) {
+            showMessage("Signing in...");
+            cachedAccessToken = await authenticateClio();
+        }
 
-if (matter) {
-   // Use 'matter' directly to populate your taskpane
-   document.getElementById("debug-raw").textContent = JSON.stringify(matter, null, 2);
-   // ... rest of your mapping logic
+        showMessage("Searching...");
+        
+        // Use the query syntax you researched to get fields in the list call
+        const response = await fetch(`${LIST_FN}?query=${encodeURIComponent(matterNumber)}`, {
+            headers: { Authorization: `Bearer ${cachedAccessToken}` }
+        });
+        
+        const json = await response.json();
+        
+        // Since we are using /matters.json, we look at the first item in the data array
+        const matter = (json.data && json.data.length > 0) ? json.data[0] : null;
+
+        if (!matter) {
+            showMessage(`No match found for ${matterNumber}`);
+            // Display raw response for debugging
+            document.getElementById("debug-raw").textContent = JSON.stringify(json, null, 2);
+            return;
+        }
+
+        // Show the matter data in the debug window
+        document.getElementById("debug-raw").textContent = JSON.stringify(matter, null, 2);
+        
+        const cfvs = matter.custom_field_values || [];
+        
+        /**
+         * Helper to extract values from the Custom Field Array.
+         * Matches IDs regardless of prefix (e.g., "3528784956")
+         */
+        const getVal = (id) => {
+            const found = cfvs.find(v => String(v.id).includes(id));
+            if (!found) return "—";
+            // Return standard value, or the specific text from a picklist/dropdown
+            return found.value || (found.picklist_option ? found.picklist_option.option : "—");
+        };
+
+        // Map the API response to the Taskpane's data-field keys
+        currentMatter = {
+            client_name: matter.client?.name || "—",
+            matter_number: matter.display_number || "—",
+            practice_area: matter.practice_area?.name || "—",
+            matter_status: matter.status || "—",
+            case_name: getVal("3528784956"),
+            adverse_party_name: getVal("3528784941"),
+            court_file_no: getVal("3528784971"),
+            court_name: getVal("3528784986"),
+            judge_name: getVal("4815771545")
+        };
+
+        renderFields();
+        clearMessage();
+
+    } catch (err) {
+        showMessage("Taskpane Error: " + err.message);
+        console.error(err);
+    }
 }
 
 /**
- * UI RENDERING
+ * UI RENDERING: Updates the HTML elements with the matter data
  */
 function renderFields() {
     document.querySelectorAll(".cdr-field").forEach((el) => {
         const key = el.getAttribute("data-field");
         const value = currentMatter?.[key] || "—";
         
-        // Store the original label text if not already stored
         if (!el.dataset.label) el.dataset.label = el.textContent.trim();
         
         el.innerHTML = `
@@ -46,14 +97,13 @@ function renderFields() {
             <div class="cdr-field-value">${value}</div>
         `;
         
-        // Visual feedback for empty fields
         if (value === "—") el.classList.add("cdr-field-empty");
         else el.classList.remove("cdr-field-empty");
     });
 }
 
 /**
- * AUTHENTICATION
+ * AUTHENTICATION: Handles the Clio OAuth2 flow via Netlify
  */
 function authenticateClio() {
     return new Promise((resolve, reject) => {
@@ -87,9 +137,6 @@ function authenticateClio() {
     });
 }
 
-/**
- * FEEDBACK MESSAGES
- */
 function showMessage(text) {
     const details = document.getElementById("details-section");
     if (!details) return;
@@ -110,7 +157,7 @@ function clearMessage() {
 }
 
 /**
- * INITIALIZATION
+ * INITIALIZATION: Hook up the search button
  */
 Office.onReady((info) => {
     if (info.host !== Office.HostType.Word) return;
@@ -118,7 +165,6 @@ Office.onReady((info) => {
     document.getElementById("app-body").style.display = "block";
     document.getElementById("searchButton").onclick = searchMatter;
 
-    // Expand/Collapse Group logic
     document.querySelectorAll(".cdr-group-toggle").forEach((toggle) => {
         toggle.onclick = () => {
             toggle.classList.toggle("expanded");
