@@ -4,8 +4,9 @@ exports.handler = async (event) => {
   const { id } = event.queryStringParameters || {};
   if (!id) return { statusCode: 400, body: "Missing ID" };
 
-  // Use encoded braces: { is %7B and } is %7D
-  const fields = "id,display_number,number,status,client%7Bname,first_name,last_name%7D,practice_area%7Bname%7D,custom_field_values%7Bid,value,field_name,picklist_option%7Boption%7D%7D";
+  // Use the dash (-) expansion for nested objects. 
+  // This avoids all curly braces that cause the "InvalidFields" error.
+  const fields = "id,display_number,number,status,client-name,practice_area-name,custom_field_values-id,custom_field_values-value,custom_field_values-field_name";
 
   const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
 
