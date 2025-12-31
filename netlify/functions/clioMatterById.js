@@ -7,7 +7,8 @@ exports.handler = async (event) => {
   const fields = "id,display_number,custom_field_values{id,value,field_name,picklist_option{option}}";
   
   // encodeURI handles the brackets and commas so Clio doesn't choke on them
-  const url = encodeURI(`https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`);
+  const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${encodeURIComponent(fields)}`;
+
 
   try {
     const resp = await fetch(url, {
