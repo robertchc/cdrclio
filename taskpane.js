@@ -60,7 +60,10 @@ async function loadCustomFields(accessToken) {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
 
-  if (!resp.ok) throw new Error(`Custom fields lookup failed (${resp.status})`);
+  if (!resp.ok) {
+    const body = await safeReadText(resp);
+    throw new Error(`Custom fields lookup failed (${resp.status}): ${body}`);
+  }
 
   const json = await resp.json();
   const rows = Array.isArray(json?.data) ? json.data : [];
@@ -82,9 +85,14 @@ async function loadCustomFields(accessToken) {
 async function searchMatter() {
   const input = document.getElementById("matterNumber");
   const matterNumber = (input?.value || "").trim();
-  if (!matterNumber) return showMessage("Please enter a matter number.");
+
+  if (!matterNumber) {
+    showMessage("Please enter a matter number.");
+    return;
+  }
 
   currentMatter = null;
+  renderFields();
 
   try {
     if (!cachedAccessToken) {
@@ -92,79 +100,128 @@ async function searchMatter() {
       cachedAccessToken = await authenticateClio();
     }
 
-    customFieldsById = await loadCustomFields(cachedAccessToken);
-    const fieldBag = await fetchMatterFieldBagByMatterNumber(
-      cachedAccessToken,
-      matterNumber,
-      customFieldsById
-    );
+    showMessage("Loading custom fields...");
+    try {
+      customFieldsById = await loadCustomFields(cachedAccessToken);
+    } catch (cfError) {
+      console.warn("Field definitions failed, using fallback.", cfError);
+      customFieldsById = {};
+    }
+
+    showMessage("Searching Clio for " + matterNumber + "...");
+    const fieldBag = await fetchMatterFieldBagByMatterNumber(cachedAccessToken, matterNumber, customFieldsById);
 
     if (!fieldBag) {
+      currentMatter = null;
       renderFields();
-      return showMessage(`No match found for matter # ${matterNumber}.`);
+      showMessage(`No match found for matter # ${matterNumber}.`);
+      return;
     }
 
     currentMatter = fieldBag;
     renderFields();
     clearMessage();
-  } catch (e) {
-    cachedAccessToken = null;
-    customFieldsById = null;
+
+  } catch (error) {
+    console.error("Search failed:", error);
+    const msg = String(error || "");
+    if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
+      cachedAccessToken = null;
+      customFieldsById = null;
+    }
+    currentMatter = null;
     renderFields();
-    showMessage(e.message || "Search failed");
+    showMessage("Search failed: " + (error.message || "Unknown error"));
   }
 }
 
 async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMap) {
-  const listFields =
-    "id,display_number,status,client{name,first_name,last_name},practice_area{name}";
-  const listUrl = `${LIST_FN}?query=${encodeURIComponent(
-    matterNumber
-  )}&fields=${encodeURIComponent(listFields)}`;
+  // Keep list lightweight
+  const listFields = "id,display_number,client{name,first_name,last_name},status,practice_area{name}";
+  const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}&fields=${encodeURIComponent(listFields)}`;
 
   const listResp = await fetch(listUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
-  const listJson = await listResp.json();
-  const match = listJson?.data?.[0];
-  if (!match?.id) return null;
 
+  if (!listResp.ok) {
+    const body = await safeReadText(listResp);
+    throw new Error(`Matter search failed (${listResp.status}): ${body}`);
+  }
+
+  const listJson = await listResp.json();
+  debugRaw(listJson);
+
+  const records = Array.isArray(listJson?.data) ? listJson.data : [];
+  if (!records.length) return null;
+
+  const match = records[0];
+  const matterId = match?.id;
+  if (!matterId) return null;
+
+  // IMPORTANT: request nested custom field value shape with brace nesting
   const detailFields =
-    "id,display_number,number,status,client{name},practice_area{name}," +
+    "id,display_number,number,status,client{name,first_name,last_name},practice_area{name}," +
     "custom_field_values{id,value,picklist_option,custom_field{id}}";
 
-  const detailUrl = `${DETAIL_FN}?id=${match.id}&fields=${encodeURIComponent(
-    detailFields
-  )}`;
+  const detailUrl = `${DETAIL_FN}?id=${encodeURIComponent(matterId)}&fields=${encodeURIComponent(detailFields)}`;
 
   const detailResp = await fetch(detailUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
 
+  if (!detailResp.ok) {
+    const body = await safeReadText(detailResp);
+    throw new Error(`Matter detail failed (${detailResp.status}): ${body}`);
+  }
+
   const detailJson = await detailResp.json();
-  return buildFieldBag(detailJson?.data, cfMap);
+  debugRaw(detailJson);
+
+  const matterData = detailJson?.data;
+  if (!matterData) return null;
+
+  return buildFieldBag(matterData, cfMap);
 }
 
-// --- FIELD MAPPING ---
+// --- LOGIC FUNCTIONS ---
 
 function buildFieldBag(matter, cfMap) {
   if (!matter) return null;
 
-  const custom = {};
-  (matter.custom_field_values || []).forEach((cfv) => {
-    const id = String(cfv?.custom_field?.id || "").replace(/\D/g, "");
-    const name = cfMap?.[id]?.name;
+  const custom = Object.create(null);
+  const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
+
+  cfvs.forEach((cfv) => {
+    const customFieldId = cfv?.custom_field?.id; // prefer numeric custom field id
+    if (customFieldId == null) return;
+
+    const numericId = String(customFieldId).replace(/\D/g, "");
+    const meta = cfMap ? cfMap[numericId] : null;
+    const name = meta ? meta.name : null;
     if (!name) return;
-    custom[name.toLowerCase()] =
-      typeof cfv.value === "object" ? JSON.stringify(cfv.value) : String(cfv.value ?? "").trim();
+
+    const key = name.toLowerCase().trim();
+
+    let val = cfv?.value;
+    if (val && typeof val === "object") {
+      val = val.name || val.display_name || val.first_name || JSON.stringify(val);
+    }
+    custom[key] = (val !== undefined && val !== null) ? String(val).trim() : null;
   });
 
-  const getCf = (n) => custom[n.toLowerCase()] || "—";
+  const getCf = (name) => {
+    if (!name) return "—";
+    const found = custom[name.toLowerCase().trim()];
+    return (found && found !== "null") ? found : "—";
+  };
 
   return {
     client_name: matter.client?.name || "—",
     matter_number: matter.display_number || "—",
-    practice_area: matter.practice_area?.name || "—",
+    practice_area: matter.practice_area?.name || matter.practice_area || "—",
     matter_status: matter.status || "—",
 
     adverse_party_name: getCf("Adverse Party Name"),
@@ -174,22 +231,62 @@ function buildFieldBag(matter, cfMap) {
     date_of_separation: getCf("Date of Separation"),
     date_of_marriage: getCf("Date of Marriage"),
     date_of_divorce: getCf("Date of Divorce"),
+    date_of_most_recent_order: getCf("Date of Most Recent Order"),
+    type_of_most_recent_order: getCf("Type of Most Recent Order"),
     judge_name: getCf("Judge Name ie. Justice Jim Doe"),
+    your_honour: getCf("My Lord/Lady/Your Honour"),
+    matter_stage: getCf("Matter stage"),
+    responsible_attorney: getCf("Responsible Attorney"),
+    originating_attorney: getCf("Originating Attorney"),
+    opposing_counsel: getCf("Opposing Counsel"),
+    matrimonial_status: getCf("Matrimonial Status"),
+    cohabitation_begin_date: getCf("Co-Habitation Begin Date"),
+    common_law_begin_date: getCf("Spousal Common-Law Begin Date"),
+    place_of_marriage: getCf("Place of Marriage"),
+    adverse_dob: getCf("Adverse DOB")
   };
 }
 
-// --- UI HELPERS ---
+// --- UI & AUTH HELPERS ---
 
 function renderFields() {
   document.querySelectorAll(".cdr-field").forEach((el) => {
-    const key = el.dataset.field;
-    const val = currentMatter?.[key];
-    el.querySelector(".cdr-field-value").textContent = val || "—";
+    const key = el.getAttribute("data-field");
+    if (!key) return;
+
+    if (!el.dataset.label) el.dataset.label = el.textContent.trim();
+    const label = el.dataset.label;
+
+    const value = currentMatter?.[key];
+    const display = value == null || String(value).trim() === "" ? "—" : String(value);
+
+    el.innerHTML = "";
+    const labelDiv = document.createElement("div");
+    labelDiv.className = "cdr-field-label";
+    labelDiv.textContent = label;
+
+    const valueDiv = document.createElement("div");
+    valueDiv.className = "cdr-field-value";
+    valueDiv.textContent = display;
+
+    el.appendChild(labelDiv);
+    el.appendChild(valueDiv);
+
+    if (display === "—") el.classList.add("cdr-field-empty");
+    else el.classList.remove("cdr-field-empty");
   });
 }
 
 function insertTextAtCursor(text) {
-  Office.context.document.setSelectedDataAsync(text);
+  Office.context.document.setSelectedDataAsync(
+    text,
+    { coercionType: Office.CoercionType.Text },
+    (result) => {
+      if (result.status === Office.AsyncResultStatus.Failed) {
+        console.error("Insertion failed: " + result.error.message);
+      }
+    }
+  );
 }
 
 function authenticateClio() {
@@ -197,16 +294,21 @@ function authenticateClio() {
     Office.context.ui.displayDialogAsync(
       DIALOG_START_URL,
       { height: 60, width: 40 },
-      (r) => {
-        const d = r.value;
-        d.addEventHandler(Office.EventType.DialogMessageReceived, async (arg) => {
+      (result) => {
+        if (result.status === Office.AsyncResultStatus.Failed) {
+          reject(result.error);
+          return;
+        }
+        const dialog = result.value;
+        dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (arg) => {
           try {
-            const tok = await exchangeCodeForToken(arg.message);
-            resolve(tok.access_token);
+            const tokenResponse = await exchangeCodeForToken(arg.message);
+            if (!tokenResponse?.access_token) throw new Error("Token exchange did not return an access_token.");
+            resolve(tokenResponse.access_token);
           } catch (e) {
             reject(e);
           } finally {
-            d.close();
+            dialog.close();
           }
         });
       }
@@ -222,15 +324,46 @@ async function exchangeCodeForToken(code) {
       code,
       redirect_uri: REDIRECT_URI,
       client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
+      client_secret: CLIENT_SECRET
     }),
   });
+
+  if (!resp.ok) {
+    const body = await safeReadText(resp);
+    throw new Error(`Token exchange failed (${resp.status}): ${body}`);
+  }
+
   return resp.json();
 }
 
-function showMessage(t) {
-  document.getElementById("cdr-message").textContent = t;
-}
 function clearMessage() {
-  document.getElementById("cdr-message").textContent = "";
+  const status = document.getElementById("status");
+  if (!status) return;
+  status.style.display = "none";
+  status.textContent = "";
+}
+
+function showMessage(text) {
+  const status = document.getElementById("status");
+  if (!status) return;
+  status.style.display = "block";
+  status.textContent = text;
+}
+
+function debugRaw(obj) {
+  const pre = document.getElementById("debug-raw");
+  if (!pre) return;
+  try {
+    pre.textContent = JSON.stringify(obj, null, 2);
+  } catch {
+    pre.textContent = String(obj);
+  }
+}
+
+async function safeReadText(resp) {
+  try {
+    return await resp.text();
+  } catch {
+    return "";
+  }
 }
