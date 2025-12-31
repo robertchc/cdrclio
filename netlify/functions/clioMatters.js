@@ -1,76 +1,39 @@
-const ALLOWED_ORIGIN = "https://meek-seahorse-afd241.netlify.app";
-
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-    "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization,Content-Type,Accept",
-    "Vary": "Origin",
-  };
-}
+const fetch = require("node-fetch");
 
 exports.handler = async (event) => {
+  const { query } = event.queryStringParameters;
+  if (!query) return { statusCode: 400, body: "Missing search query" };
+
+  // Define the IDs of the custom fields you actually care about
+  // This matches your taskpane's requirements (Case Name, adverse party, etc.)
+  const customFieldIds = ["3528784956", "3528784941", "3528784971", "3528784986", "4815771545"];
+  
+  // Build the field list: we want the id, number, and the specific custom field values
+  const fields = "id,display_number,client{name},custom_field_values{id,value,field_name,picklist_option{option}}";
+  
+  // Create the filter string for the custom field IDs
+  const cfFilter = customFieldIds.map(id => `custom_field_ids[]=${id}`).join('&');
+
+  // Combine into the final URL
+  const url = `https://app.clio.com/api/v4/matters.json?query=${encodeURIComponent(query)}&fields=${fields}&${cfFilter}`;
+
   try {
-    // Preflight
-    if (event.httpMethod === "OPTIONS") {
-      return {
-        statusCode: 204,
-        headers: corsHeaders(),
-        body: "",
-      };
-    }
-
-    // Method guard
-    if (event.httpMethod !== "GET") {
-      return {
-        statusCode: 405,
-        headers: { ...corsHeaders(), "Content-Type": "text/plain" },
-        body: "Method Not Allowed",
-      };
-    }
-
-    // Auth guard
-    const auth = event.headers.authorization || event.headers.Authorization;
-    if (!auth || !auth.startsWith("Bearer ")) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders(), "Content-Type": "text/plain" },
-        body: "Missing or invalid Authorization header",
-      };
-    }
-
-    const query = event.queryStringParameters?.query || "";
-    const fields = event.queryStringParameters?.fields || "id,display_number,client";
-
-    const url =
-      "https://app.clio.com/api/v4/matters" +
-      `?query=${encodeURIComponent(query)}` +
-      `&fields=${encodeURIComponent(fields)}`;
-
     const resp = await fetch(url, {
       method: "GET",
-      headers: {
-        Authorization: auth,
-        Accept: "application/json",
-      },
+      headers: { 
+        "Authorization": event.headers.authorization,
+        "Accept": "application/json"
+      }
     });
 
-    const text = await resp.text();
-    const contentType = resp.headers.get("content-type") || "application/json";
+    const json = await resp.json();
 
     return {
-      statusCode: resp.status,
-      headers: {
-        ...corsHeaders(),
-        "Content-Type": contentType,
-      },
-      body: text,
+      statusCode: 200,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify(json)
     };
-  } catch (e) {
-    return {
-      statusCode: 500,
-      headers: { ...corsHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ error: String(e) }),
-    };
+  } catch (err) {
+    return { statusCode: 500, body: err.message };
   }
 };
