@@ -167,10 +167,6 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
   const matterId = match?.id;
   if (!matterId) return null;
 
-  // IMPORTANT: request nested custom field value shape with brace nesting
-  const detailFields =
-    "id,display_number,number,status,client{name,first_name,last_name},practice_area{name}," +
-    "custom_field_values{id,value,picklist_option,custom_field{id}}";
 
 // taskpane.js
 // Simplify! Don't pass fields from here.
