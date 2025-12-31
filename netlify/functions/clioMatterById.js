@@ -2,36 +2,38 @@ const fetch = require("node-fetch");
 
 exports.handler = async (event) => {
   const { id } = event.queryStringParameters || {};
-  if (!id) return { statusCode: 400, body: "Missing ID" };
+  
+  // We are going to use the simplest possible expansion to see if it works.
+  const fields = "id,display_number,custom_field_values%7Bid,value%7D";
+  const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
 
-  // 1. The specific IDs you researched
-  const cfIds = ["3528784956", "3528784941", "3528784971", "3528784986", "4815771545"];
-  
-  // 2. Build the query string manually to ensure NO double-encoding
-  // We use the exact picklist_option fix you found.
-  const fields = "id,display_number,status,client{name},practice_area{name},custom_field_values{id,value,picklist_option,custom_field{id}}";
-  
-  let url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${encodeURIComponent(fields)}`;
-  
-  // 3. Append the IDs using the array syntax you discovered
-  cfIds.forEach(cfId => {
-    url += `&custom_field_ids[]=${cfId}`;
-  });
+  // LOG THE URL - This will show up in your Netlify Function Logs
+  console.log("FULL REQUEST URL:", url);
 
   try {
     const resp = await fetch(url, {
-      method: "GET",
-      headers: { 
-        "Authorization": event.headers.authorization,
-        "Accept": "application/json"
-      },
+      headers: { "Authorization": event.headers.authorization, "Accept": "application/json" }
     });
 
     const body = await resp.text();
+
+    // If Clio returns an error, we wrap it with the URL we sent
+    // so you can see it in your Word Taskpane.
+    if (!resp.ok) {
+      return {
+        statusCode: resp.status,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({
+          error: JSON.parse(body),
+          debug_url_sent: url
+        })
+      };
+    }
+
     return {
-      statusCode: resp.status,
+      statusCode: 200,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: body,
+      body: body
     };
   } catch (err) {
     return { statusCode: 500, body: err.message };
