@@ -44,31 +44,19 @@ async function searchMatter() {
   if (!matterNumber) return showMessage("Please enter a matter number.");
 
   try {
+    // ACTUAL AUTH TRIGGER
     if (!cachedAccessToken) {
-      showMessage("Authenticating...");
-      // For this implementation, we assume your auth flow sets cachedAccessToken
-      // or triggers the dialog. Replace with your auth logic if needed.
+      showMessage("Please sign in to Clio via the popup...");
+      cachedAccessToken = await authenticateClio(); // This opens the window and WAITS
     }
 
     showMessage("Loading mapping...");
     customFieldsById = await loadCustomFields(cachedAccessToken);
 
-    showMessage("Searching...");
+    showMessage("Searching Clio...");
     const fieldBag = await fetchMatterFieldBagByMatterNumber(cachedAccessToken, matterNumber, customFieldsById);
-
-    if (!fieldBag) {
-      showMessage("No matter found.");
-      currentMatter = null;
-    } else {
-      currentMatter = fieldBag;
-      clearMessage();
-    }
-    renderFields();
-  } catch (error) {
-    console.error(error);
-    showMessage("Error: " + error.message);
-  }
-}
+    
+    // ... rest of function
 
 async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMap) {
   // 1. Search for Matter ID
