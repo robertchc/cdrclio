@@ -1,3 +1,5 @@
+const fetch = require("node-fetch");
+
 const ALLOWED_ORIGIN = "https://meek-seahorse-afd241.netlify.app";
 
 exports.handler = async (event) => {
@@ -12,6 +14,10 @@ exports.handler = async (event) => {
 
   try {
     const auth = event.headers.authorization || event.headers.Authorization;
+    if (!auth) {
+      return { statusCode: 401, headers, body: JSON.stringify({ ok: false, error: "Missing Authorization header" }) };
+    }
+
     const url = "https://app.clio.com/api/v4/custom_fields.json?limit=200&fields=id,name,field_type";
 
     const resp = await fetch(url, {
@@ -22,15 +28,14 @@ exports.handler = async (event) => {
     const json = await resp.json();
 
     return {
-      statusCode: 200,
+      statusCode: resp.status,
       headers,
       body: JSON.stringify({
         ok: resp.ok,
-        // SURGICAL FIX: Flatten the data array here
-        data: json?.data || []
+        data: Array.isArray(json?.data) ? json.data : []
       }),
     };
   } catch (e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: String(e) }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ ok: false, error: String(e) }) };
   }
 };
