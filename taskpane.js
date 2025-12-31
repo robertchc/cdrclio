@@ -92,6 +92,36 @@ async function searchMatter() {
 
 // --- DATA FETCHING ---
 
+async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMap) {
+  // 1. Search for Matter ID by Number
+  const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}`;
+  const listResp = await fetch(listUrl, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+
+  if (!listResp.ok) throw new Error(`Search failed: ${listResp.status}`);
+  const listJson = await listResp.json();
+  const matterId = listJson?.data?.[0]?.id;
+  
+  if (!matterId) return null;
+
+  // 2. Fetch the full Matter details including Custom Fields
+  const detailUrl = `${DETAIL_FN}?id=${matterId}`;
+  const detailResp = await fetch(detailUrl, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+
+  if (!detailResp.ok) throw new Error(`Detail fetch failed: ${detailResp.status}`);
+  const detailJson = await detailResp.json();
+  
+  // Update the debug pane with raw JSON
+  debugRaw(detailJson);
+
+  return buildFieldBag(detailJson.data, cfMap);
+}
+
 function buildFieldBag(matter, cfMap) {
   if (!matter) return null;
 
@@ -99,11 +129,9 @@ function buildFieldBag(matter, cfMap) {
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
   cfvs.forEach((cfv) => {
-    // Extract the ID from the custom_field object
     const cfId = cfv?.custom_field?.id;
     if (!cfId) return;
 
-    // Look up the name of this field from our map (loaded via clioCustomFields)
     const sid = String(cfId);
     const meta = cfMap ? cfMap[sid] : null;
 
@@ -111,18 +139,15 @@ function buildFieldBag(matter, cfMap) {
       const key = meta.name.toLowerCase().trim();
       let val = cfv.value;
 
-      // Handle Picklists
       if (cfv.picklist_option && cfv.picklist_option.option) {
         val = cfv.picklist_option.option;
       } 
-      // Handle Date/Text Nulls
+      
       if (val === null || val === undefined) val = "";
-
       custom[key] = String(val).trim();
     }
   });
 
-  // Helper to safely get the value or return a dash
   const getCf = (name) => {
     const found = custom[name.toLowerCase().trim()];
     return (found && found !== "") ? found : "—";
@@ -134,8 +159,6 @@ function buildFieldBag(matter, cfMap) {
     practice_area: matter.practice_area?.name || "—",
     matter_status: matter.status || "—",
 
-    // This section matches your HTML data-field names to the 
-    // exact Name of the field as it appears in Clio Settings
     adverse_party_name: getCf("Adverse Party Name"),
     case_name: getCf("Case Name (a v. b)"),
     court_file_no: getCf("Court File No. (Pleadings)"),
