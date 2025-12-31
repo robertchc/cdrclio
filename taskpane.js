@@ -136,36 +136,22 @@ async function searchMatter() {
 }
 
 async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMap) {
-  // 1. Search for the Matter ID (Keep URL simple)
-  const listUrl = `${LIST_FN}?query=${encodeURIComponent(matterNumber)}`;
+  // ... (previous search code) ...
+  const matterId = listJson?.data?.[0]?.id;
+  if (!matterId) return null;
 
-  const listResp = await fetch(listUrl, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-  });
-
-  if (!listResp.ok) throw new Error(`Search failed: ${listResp.status}`);
-  const listJson = await listResp.json();
-  const records = listJson?.data || [];
-  if (!records.length) return null;
-
-  const matterId = records[0].id;
-
-  // 2. Get the full Detail (Brackets are now handled safely inside the Netlify function)
   const detailUrl = `${DETAIL_FN}?id=${matterId}`;
-
   const detailResp = await fetch(detailUrl, {
     method: "GET",
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
 
-  const detailText = await detailResp.text();
-  if (!detailResp.ok) throw new Error(`Detail failed: ${detailText}`);
+  const detailJson = await detailResp.json();
+  
+  // ADD THIS LINE HERE:
+  debugRaw(detailJson); 
 
-  const detailJson = JSON.parse(detailText);
-  const matterData = detailJson?.data;
-
-  return buildFieldBag(matterData, cfMap);
+  return buildFieldBag(detailJson.data, cfMap);
 }
 
 
