@@ -4,35 +4,24 @@ exports.handler = async (event) => {
   const { query } = event.queryStringParameters || {};
   if (!query) return { statusCode: 400, body: "Missing query" };
 
-  // 1. Your researched Custom Field IDs
-  const cfIds = ["3528784956", "3528784941", "3528784971", "3528784986", "4815771545"];
-  
-  // 2. The fields string (Encoded to prevent the bracket error)
-  const fields = "id,display_number,status,client{name},practice_area{name},custom_field_values{id,value,picklist_option,custom_field{id}}";
-  
-  // 3. Construct the filter string for the IDs
-  const cfFilter = cfIds.map(id => `custom_field_ids[]=${id}`).join('&');
+  // We keep search lightweight; the taskpane will follow up with clioMatterById for the full data
+  const fields = "id,display_number,status,client%7Bname%7D";
 
-  // 4. The Final URL
-  const url = `https://app.clio.com/api/v4/matters.json` +
-              `?query=${encodeURIComponent(query)}` +
-              `&fields=${encodeURIComponent(fields)}` +
-              `&${cfFilter}`;
+  const url = `https://app.clio.com/api/v4/matters.json?query=${encodeURIComponent(query)}&fields=${fields}`;
 
   try {
     const resp = await fetch(url, {
+      method: "GET",
       headers: { 
         "Authorization": event.headers.authorization,
         "Accept": "application/json"
       },
     });
 
-    const body = await resp.text();
-
     return {
       statusCode: resp.status,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: body,
+      body: await resp.text(),
     };
   } catch (err) {
     return { statusCode: 500, body: err.message };
