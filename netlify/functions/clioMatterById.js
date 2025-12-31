@@ -1,17 +1,13 @@
 const fetch = require("node-fetch");
 
 exports.handler = async (event) => {
-  // 1. Get the ID from the query string
   const { id } = event.queryStringParameters || {};
   if (!id) return { statusCode: 400, body: "Missing ID" };
 
-  // 2. Define the exact fields Clio requires. 
-  // We use the curly braces {} as specified in the Clio V4 Documentation.
-  const fields = "id,display_number,number,status,client{name,first_name,last_name},practice_area{name},custom_field_values{id,value,picklist_option,custom_field{id}}";
+  // Use encoded braces: { is %7B and } is %7D
+  const fields = "id,display_number,number,status,client%7Bname,first_name,last_name%7D,practice_area%7Bname%7D,custom_field_values%7Bid,value,field_name,picklist_option%7Boption%7D%7D";
 
-  // 3. ENCODE the fields. 
-  // This turns "}" into "%7D" so the server doesn't think the field name is "custom_field_values}"
-  const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${encodeURIComponent(fields)}`;
+  const url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
 
   try {
     const resp = await fetch(url, {
@@ -23,7 +19,6 @@ exports.handler = async (event) => {
     });
 
     const json = await resp.json();
-
     return {
       statusCode: 200,
       headers: { "Access-Control-Allow-Origin": "*" },
