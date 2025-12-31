@@ -178,7 +178,8 @@ function buildFieldBag(matter, cfMap) {
   const cfvs = Array.isArray(matter.custom_field_values) ? matter.custom_field_values : [];
 
   cfvs.forEach((cfv) => {
-    const customFieldId = cfv?.custom_field?.id; // prefer numeric custom field id
+    // 1. Identify the field using the Definition ID
+    const customFieldId = cfv?.custom_field?.id; 
     if (customFieldId == null) return;
 
     const numericId = String(customFieldId).replace(/\D/g, "");
@@ -188,23 +189,34 @@ function buildFieldBag(matter, cfMap) {
 
     const key = name.toLowerCase().trim();
 
+    // 2. Extract the Value (Logic for Picklists vs. Text vs. Objects)
     let val = cfv?.value;
-    if (val && typeof val === "object") {
+
+    // PRIORITY: If there is a picklist_option, use the user-friendly text (e.g., "Yes")
+    if (cfv?.picklist_option && cfv.picklist_option.option) {
+      val = cfv.picklist_option.option;
+    } 
+    // FALLBACK: If value is an object (like a Contact), try to find a name property
+    else if (val && typeof val === "object") {
       val = val.name || val.display_name || val.first_name || JSON.stringify(val);
     }
+
+    // Store cleaned string
     custom[key] = (val !== undefined && val !== null) ? String(val).trim() : null;
   });
 
   const getCf = (name) => {
     if (!name) return "—";
     const found = custom[name.toLowerCase().trim()];
-    return (found && found !== "null") ? found : "—";
+    // Prevent "null" or "undefined" strings from appearing in the document
+    return (found && found !== "null" && found !== "undefined") ? found : "—";
   };
 
+  // 3. Map to your specific Word Template fields
   return {
     client_name: matter.client?.name || "—",
     matter_number: matter.display_number || "—",
-    practice_area: matter.practice_area?.name || matter.practice_area || "—",
+    practice_area: (matter.practice_area?.name || matter.practice_area) || "—",
     matter_status: matter.status || "—",
 
     adverse_party_name: getCf("Adverse Party Name"),
