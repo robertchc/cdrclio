@@ -145,13 +145,20 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
 
-  if (!listResp.ok) {
-    const body = await safeReadText(listResp);
-    throw new Error(`Matter search failed (${listResp.status}): ${body}`);
+  const listText = await listResp.text();
+  let listJson;
+  try {
+    listJson = JSON.parse(listText);
+  } catch {
+    debugRaw({ step: "LIST_FN", status: listResp.status, ok: listResp.ok, body: listText });
+    throw new Error(`Matter search returned non-JSON (${listResp.status})`);
   }
 
-  const listJson = await listResp.json();
   debugRaw(listJson);
+
+  if (!listResp.ok) {
+    throw new Error(`Matter search failed (${listResp.status}): ${listText}`);
+  }
 
   const records = Array.isArray(listJson?.data) ? listJson.data : [];
   if (!records.length) return null;
@@ -172,12 +179,29 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
 
+  const detailText = await detailResp.text();
+
+  // Always log DETAIL response, even on errors / non-JSON
+  debugRaw({
+    step: "DETAIL_FN",
+    url: detailUrl,
+    status: detailResp.status,
+    ok: detailResp.ok,
+    body: detailText,
+  });
+
   if (!detailResp.ok) {
-    const body = await safeReadText(detailResp);
-    throw new Error(`Matter detail failed (${detailResp.status}): ${body}`);
+    throw new Error(`Matter detail failed (${detailResp.status}): ${detailText}`);
   }
 
-  const detailJson = await detailResp.json();
+  let detailJson;
+  try {
+    detailJson = JSON.parse(detailText);
+  } catch {
+    throw new Error(`Matter detail returned non-JSON (${detailResp.status}): ${detailText}`);
+  }
+
+  // Optional: replace debug output with parsed JSON when it succeeds
   debugRaw(detailJson);
 
   const matterData = detailJson?.data;
