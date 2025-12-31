@@ -6,13 +6,13 @@ exports.handler = async (event) => {
 
   const cfIds = ["3528784956", "3528784941", "3528784971", "3528784986", "4815771545"];
   
-  // Use LITERAL brackets. Clio's v4 API specifically requires these 
-  // to be interpreted as expansion operators, not encoded text.
-  const fields = "id,display_number,status,client{name},practice_area{name},custom_field_values{id,value,picklist_option,custom_field{id}}";
+  // 1. REMOVE THE NESTING. We ask for custom_field_values as a flat object.
+  // We removed the {id, value, ...} part entirely.
+  const fields = "id,display_number,status,client{name},practice_area{name},custom_field_values";
   
   let url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
   
-  // Append the custom field filters
+  // 2. Use your custom_field_ids discovery to filter the list
   cfIds.forEach(cfId => {
     url += `&custom_field_ids[]=${cfId}`;
   });
@@ -29,10 +29,7 @@ exports.handler = async (event) => {
     const body = await resp.text();
     return {
       statusCode: resp.status,
-      headers: { 
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json"
-      },
+      headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json" },
       body: body,
     };
   } catch (err) {
