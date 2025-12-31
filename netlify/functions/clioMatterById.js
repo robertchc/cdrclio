@@ -4,17 +4,22 @@ exports.handler = async (event) => {
   const { id } = event.queryStringParameters || {};
   if (!id) return { statusCode: 400, body: "Missing ID" };
 
-  // We define the EXACT string Clio needs. 
-  // No concatenation (+) to avoid hidden character issues.
-  const fieldsString = "id,display_number,status,client{name},practice_area{name},custom_field_values{id,value,custom_field{id}}";
+  // Applying the "Secret" picklist_option field and the required structure
+  // This helps the Clio parser correctly identify the end of the expansion block.
+  const fields = [
+    "id",
+    "display_number",
+    "status",
+    "client{name}",
+    "practice_area{name}",
+    "custom_field_values{id,value,picklist_option,custom_field{id,name}}"
+  ].join(",");
 
-  // Use the browser-standard URL object to build the request.
-  // This handles all quoting and escaping automatically.
-  const clioUrl = new URL(`https://app.clio.com/api/v4/matters/${id}.json`);
-  clioUrl.searchParams.set("fields", fieldsString);
+  const url = new URL(`https://app.clio.com/api/v4/matters/${id}.json`);
+  url.searchParams.set("fields", fields);
 
   try {
-    const resp = await fetch(clioUrl.toString(), {
+    const resp = await fetch(url.toString(), {
       method: "GET",
       headers: { 
         "Authorization": event.headers.authorization,
@@ -25,10 +30,7 @@ exports.handler = async (event) => {
     const body = await resp.text();
     return {
       statusCode: resp.status,
-      headers: { 
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json"
-      },
+      headers: { "Access-Control-Allow-Origin": "*" },
       body: body
     };
   } catch (err) {
