@@ -6,13 +6,13 @@ exports.handler = async (event) => {
 
   const cfIds = ["3528784956", "3528784941", "3528784971", "3528784986", "4815771545"];
   
-  // 1. REMOVE THE NESTING. We ask for custom_field_values as a flat object.
-  // We removed the {id, value, ...} part entirely.
-  const fields = "id,display_number,status,client{name},practice_area{name},custom_field_values";
+  // FLAT EXPANSION: We ask for the array, but we don't nest the custom_field object.
+  // We include picklist_option as a top-level property of the value.
+  const fields = "id,display_number,status,client{name},practice_area{name},custom_field_values{id,value,picklist_option,custom_field}";
   
   let url = `https://app.clio.com/api/v4/matters/${id}.json?fields=${fields}`;
   
-  // 2. Use your custom_field_ids discovery to filter the list
+  // Add the ID filters you discovered
   cfIds.forEach(cfId => {
     url += `&custom_field_ids[]=${cfId}`;
   });
