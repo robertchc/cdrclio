@@ -210,6 +210,7 @@ async function fetchMatterFieldBagByMatterNumber(accessToken, matterNumber, cfMa
   return buildFieldBag(matterData, cfMap);
 }
 
+
 // --- LOGIC FUNCTIONS ---
 
 function buildFieldBag(matter, cfMap) {
